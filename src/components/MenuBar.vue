@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from "vue";
-import logo from "../Assets/avocado.png";
+import logo from "../assets/avocado.png";
 
 const title = ref("Exercise Tracker");
 const logoURL = ref("");

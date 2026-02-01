@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from "vue";
-import logo from "../Assets/avocado.png";
+import logo from "../assets/avocado.png";
 import { useRouter } from "vue-router";
 import AuthServices from "../services/authServices";
 import Utils from "../config/utils";

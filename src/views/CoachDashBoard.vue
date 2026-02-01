@@ -1,8 +1,8 @@
 <script setup>
 import { useRouter } from "vue-router";
-import barbell from "../Assets/cado-barbell.png";
-import dumbbells from "../Assets/cado-dumbbells.png";
-import clipboard from "../Assets/cado-clipboard.png";
+import barbell from "../assets/cado-barbell.png";
+import dumbbells from "../assets/cado-dumbbells.png";
+import clipboard from "../assets/cado-clipboard.png";
 
 
 const router = useRouter();
