@@ -156,7 +156,7 @@
 <script setup>
 import { ref, onMounted, watch, computed } from "vue";
 import Utils from "../config/utils.js";
-import logo from "../Assets/cado-barbell.png";
+import logo from "../assets/cado-barbell.png";
 
 import AthleteServices from "../services/athleteServices.js";
 import ExercisePlanServices from "../services/exerciseplanServices.js";
