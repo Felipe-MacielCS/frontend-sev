@@ -1,7 +1,7 @@
 import apiClient from "./services.js";
 
 export default {
-  loginUser(user) {
+  login(user) {
     return apiClient.post("login", user);
   },
   authorizeUser(code) {
