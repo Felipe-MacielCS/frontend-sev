@@ -9,22 +9,19 @@ const user = ref({});
 const loading = ref(false);
 
 const initGoogleSignUp = () => {
-  window.handleCredentialResponse = handleCredentialResponse;
+  // (Keep your existing initialization code here)
   const client = import.meta.env.VITE_APP_CLIENT_ID;
-  console.log("Google Client ID:", client);
-
   window.google.accounts.id.initialize({
     client_id: client,
-    cancel_on_tap_outside: false,
+    callback: handleCredentialResponse, // Use the local function
     auto_select: false,
-    callback: window.handleCredentialResponse,
+    cancel_on_tap_outside: false,
   });
 
   window.google.accounts.id.renderButton(document.getElementById("parent_id"), {
     type: "standard",
     theme: "outline",
     size: "large",
-    text: "signup_with",
     width: 400,
   });
 };
@@ -32,33 +29,40 @@ const initGoogleSignUp = () => {
 const handleCredentialResponse = async (response) => {
   loading.value = true;
 
-  const role = sessionStorage.getItem("signupRole") || "athlete";
-
-  const token = {
+  // 1. We only need the credential. The backend handles the rest.
+  const payload = {
     credential: response.credential,
-    isAthlete: role === "athlete",
-    isCoach: role === "coach",
   };
 
   try {
-    const res = await AuthServices.loginUser(token);
+    const res = await AuthServices.login(payload);
+    
+    // 2. 'res' is { userID: 1, role: 'Worker', ... }
     user.value = res;
-    console.log("Signed up user:", user.value);
+    console.log("Logged in user:", user.value);
 
+    // 3. Store the user. 
+    // Utils.setStore will save the object exactly as is (with 'userID').
     Utils.setStore("user", user.value);
-    Utils.setToken(user.value?.token);
+    
+    if (user.value.token) {
+        Utils.setToken(user.value.token);
+    }
 
     if (window.updateUserState) window.updateUserState();
 
-    if (user.value.isAdmin) {
+    // 4. Redirect based on the role returned by the backend
+    // Mapping: Admin -> Admin, Manager -> Coach, Worker -> Athlete
+    if (user.value.role === 'Admin') {
       router.push({ name: "admin" });
-    } else if (role === "athlete") {
-      router.push({ name: "athlete" });
+    } else if (user.value.role === 'Manager') {
+      router.push({ name: "coach" }); 
     } else {
-      router.push({ name: "coach" });
+      router.push({ name: "athlete" }); // Default for 'Worker'
     }
+
   } catch (error) {
-    console.error("Signup error:", error);
+    console.error("Login error:", error);
   } finally {
     loading.value = false;
   }
