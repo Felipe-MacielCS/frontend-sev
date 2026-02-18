@@ -7,7 +7,7 @@ var baseurl = "";
 if (import.meta.env.DEV) {
   baseurl = "http://localhost:3137/workerscheduling-t7/";
 } else {
-  baseurl = "/tracker-t7/";
+  baseurl = "/workerscheduling-t7/";
 }
 
 const apiClient = axios.create({
