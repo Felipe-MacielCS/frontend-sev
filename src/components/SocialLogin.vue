@@ -9,7 +9,6 @@ const user = ref({});
 const loading = ref(false);
 
 const initGoogleSignUp = () => {
-  // (Keep your existing initialization code here)
   const client = import.meta.env.VITE_APP_CLIENT_ID;
   window.google.accounts.id.initialize({
     client_id: client,
@@ -29,7 +28,6 @@ const initGoogleSignUp = () => {
 const handleCredentialResponse = async (response) => {
   loading.value = true;
 
-  // 1. We only need the credential. The backend handles the rest.
   const payload = {
     credential: response.credential,
   };
@@ -37,12 +35,9 @@ const handleCredentialResponse = async (response) => {
   try {
     const res = await AuthServices.login(payload);
     
-    // 2. 'res' is { userID: 1, role: 'Worker', ... }
     user.value = res;
     console.log("Logged in user:", user.value);
 
-    // 3. Store the user. 
-    // Utils.setStore will save the object exactly as is (with 'userID').
     Utils.setStore("user", user.value);
     
     if (user.value.token) {
@@ -51,15 +46,14 @@ const handleCredentialResponse = async (response) => {
 
     if (window.updateUserState) window.updateUserState();
 
-    // 4. Redirect based on the role returned by the backend
-    // Mapping: Admin -> Admin, Manager -> Coach, Worker -> Athlete
+
     if (user.value.role === 'Admin') {
-      router.push({ name: "admin" });
-    } else if (user.value.role === 'Manager') {
-      router.push({ name: "coach" }); 
-    } else {
-      router.push({ name: "athlete" }); // Default for 'Worker'
-    }
+          router.push({ name: "adminDashboard" });
+        } else if (user.value.role === 'Manager') {
+          router.push({ name: "managerDashboard" }); 
+        } else {
+          router.push({ name: "workerDashboard" });
+        }
 
   } catch (error) {
     console.error("Login error:", error);
