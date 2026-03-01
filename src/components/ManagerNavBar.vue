@@ -4,7 +4,7 @@
       <v-img src="https://upload.wikimedia.org/wikipedia/en/thumb/5/52/Oklahoma_Christian_University_logo.svg/1200px-Oklahoma_Christian_University_logo.svg.png" alt="OC Logo"></v-img>
     </v-avatar>
     <v-toolbar-title class="font-weight-bold text-h6" style="min-width: 250px;">
-      OKLAHOMA CHRISTIAN <br><span class="text-subtitle-2">UNIVERSITY</span>
+      OC<br>
     </v-toolbar-title>
 
     <v-spacer></v-spacer>
@@ -15,6 +15,7 @@
     <v-btn variant="text" class="text-none font-weight-medium" to="/manager/budget">Budget</v-btn>
     <v-btn variant="text" class="text-none font-weight-medium" to="/manager/tradeboard">Trade board</v-btn>
     <v-btn variant="text" class="text-none font-weight-medium" to="/manager/announcements">Announcements</v-btn>
+    <v-btn variant="text" class="text-none font-weight-medium" to="/manager/announcements">Availability</v-btn>
 
     <v-btn icon="mdi-cog" variant="text" class="ml-2"></v-btn>
   </v-app-bar>
