@@ -1,11 +1,8 @@
 <template>
   <v-app-bar color="#72151A" theme="dark" elevation="2" class="px-4">
-    <v-avatar rounded="0" size="48" class="mr-3">
-      <v-img src="https://upload.wikimedia.org/wikipedia/en/thumb/5/52/Oklahoma_Christian_University_logo.svg/1200px-Oklahoma_Christian_University_logo.svg.png" alt="OC Logo"></v-img>
+    <v-avatar rounded="0" size="130" class="mr-3">
+      <v-img src="/src/Assets/plain_eagle.png" alt="OC Logo"></v-img>
     </v-avatar>
-    <v-toolbar-title class="font-weight-bold text-h6" style="min-width: 250px;">
-      OC<br>
-    </v-toolbar-title>
 
     <v-spacer></v-spacer>
 
