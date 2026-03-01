@@ -4,11 +4,6 @@
       
       <v-col cols="12" md="3">
         
-        <v-card class="mb-4 pa-2 d-flex align-center justify-space-between bg-grey-lighten-3" elevation="1">
-          <v-btn icon="mdi-chevron-left" variant="plain" density="comfortable"></v-btn>
-          <span class="font-weight-medium text-subtitle-1">Jan 26 - Feb 1</span>
-          <v-btn icon="mdi-chevron-right" variant="plain" density="comfortable"></v-btn>
-        </v-card>
 
         <v-card class="mb-4 pa-4 bg-grey-lighten-3" elevation="1">
           <h3 class="text-subtitle-1 font-weight-bold mb-3">Filter</h3>
@@ -90,19 +85,18 @@ export default {
         worker: 'Workers'
       },
       teamShifts: [],
-      // ... keep your other data variables ...
+      
     };
   },
   methods: {
-    // ... keep your openCreateModal, etc. methods ...
+   
   }
 };
 </script>
 
 <style scoped>
-/* You can override FullCalendar styles here if you want to hide its default header 
-   since you built a custom date navigator in the sidebar */
+
 :deep(.fc-header-toolbar) {
-  /* margin-bottom: 0.5em !important; */
+ 
 }
 </style>
