@@ -3,8 +3,8 @@ import { ref, computed } from "vue";
 import { useRoute } from "vue-router";
 import Utils from "./config/utils";
 
-import MenuBar from "./components/MenuBar.vue"; 
-import NavMenu from "./components/ManagerNavBar.vue"; 
+import ManagerNavBar from "./components/ManagerNavBar.vue"; 
+import WorkerNavBar from "./components/WorkerNavBar.vue"; 
 
 const user = ref(Utils.getStore("user"));
 const route = useRoute();
@@ -26,11 +26,11 @@ const showNav = computed(() => {
   <v-app>
     <template v-if="showNav && user">
       
-      <NavMenu v-if="user.role === 'Manager'" />
+      <ManagerNavBar v-if="user.role === 'Manager'" />
       
-      <MenuBar v-else :user="user" />
-      
-    </template>
+      <WorkerNavBar v-else-if="user.role === 'Worker'" :user="user" />
+
+      </template>
     
     <v-main>
       <router-view />

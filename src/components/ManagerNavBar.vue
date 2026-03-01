@@ -25,7 +25,7 @@ export default {
 </script>
 
 <style scoped>
-/* Add a subtle underline to active links to match your mockup */
+
 .v-btn--active {
   border-bottom: 2px solid white;
   border-radius: 0;
