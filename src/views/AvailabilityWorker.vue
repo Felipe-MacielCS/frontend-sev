@@ -5,71 +5,34 @@
       <v-col cols="12" md="3">
         
         <v-card class="mb-4 pa-4 bg-grey-lighten-3" elevation="1">
-          <h3 class="text-subtitle-1 font-weight-bold mb-3">Sync Availability</h3>
+          <h3 class="text-subtitle-1 font-weight-bold mb-3">Sync Schedule</h3>
           <p class="text-body-2 mb-4 text-medium-emphasis">
-            Import your class schedule to automatically block out times you are busy.
+            Import your class schedule to automatically block out times you cannot work.
           </p>
-          <v-btn color="blue-darken-2" block prepend-icon="mdi-google" @click="showGoogleModal = true">
+          <v-btn color="blue-darken-2" block prepend-icon="mdi-google" @click="showGoogleModal = true" :loading="isSyncing">
             Sync Google Calendar
           </v-btn>
         </v-card>
 
         <v-card class="mb-4 pa-4 bg-grey-lighten-3" elevation="1">
-          <h3 class="text-subtitle-1 font-weight-bold mb-3">Filter</h3>
-          
-          <v-select
-            v-model="filters.position"
-            :items="['Positions', 'Lifeguard', 'Desk']"
-            variant="solo"
-            density="compact"
-            hide-details
-            class="mb-4"
-          ></v-select>
-
-          <h4 class="text-subtitle-2 font-weight-medium mb-1">Status</h4>
-          <v-checkbox v-model="filters.status" label="All" value="all" density="compact" hide-details class="mb-n2"></v-checkbox>
-          <v-checkbox v-model="filters.status" label="Assigned" value="assigned" density="compact" hide-details class="mb-n2"></v-checkbox>
-          <v-checkbox v-model="filters.status" label="Open" value="open" density="compact" hide-details class="mb-4"></v-checkbox>
-
-          <v-select
-            v-model="filters.worker"
-            :items="['Workers', 'Felipe', 'John']"
-            variant="solo"
-            density="compact"
-            hide-details
-          ></v-select>
-        </v-card>
-
-        <v-card class="pa-4 bg-grey-lighten-3" elevation="1">
-          <h3 class="text-subtitle-1 font-weight-bold mb-3">Alerts</h3>
-          
-          <div class="d-flex align-center justify-space-between mb-2">
-            <div class="d-flex align-center">
-              <v-icon color="red-darken-2" size="small" class="mr-2">mdi-circle</v-icon>
-              <span class="text-body-2">Unassigned Shift</span>
-            </div>
-            <span class="font-weight-bold text-body-2">1</span>
-          </div>
-
-          <div class="d-flex align-center justify-space-between">
-            <div class="d-flex align-center">
-              <v-icon color="orange-lighten-1" size="small" class="mr-2">mdi-circle</v-icon>
-              <span class="text-body-2">Switch Shift Pending</span>
-            </div>
-            <span class="font-weight-bold text-body-2">1</span>
-          </div>
+          <h3 class="text-subtitle-1 font-weight-bold mb-3">Instructions</h3>
+          <p class="text-body-2 text-medium-emphasis">
+            Click and drag on the calendar to manually create <strong class="text-red">Red Blocks</strong> for times you are <strong>unavailable</strong> to work. 
+            <br><br>
+            Click any existing block to remove it.
+          </p>
         </v-card>
       </v-col>
 
       <v-col cols="12" md="9">
         <v-card elevation="2" class="pa-2 bg-white rounded-lg">
           <Calendar 
-            :events="availabilityBlocks" 
+            :events="unavailabilityBlocks" 
             initialView="timeGridWeek" 
             :isEditable="true" 
             :isSelectable="true"
-            @time-selected="addAvailability"
-            @shift-clicked="removeAvailability"
+            @time-selected="addUnavailability"
+            @shift-clicked="removeUnavailability"
           />
         </v-card>
       </v-col>
@@ -108,53 +71,67 @@
 
 <script>
 import Calendar from "../components/Calendar.vue";
+import apiClient from "../services/services.js";
 
 export default {
   name: "WorkerAvailability",
   components: { Calendar },
   data() {
     return {
-      filters: {
-        position: 'Positions',
-        status: ['all'],
-        worker: 'Workers'
-      },
-      availabilityBlocks: [],
+      unavailabilityBlocks: [],
       showGoogleModal: false,
-      googleIcalLink: ""
+      googleIcalLink: "",
+      isSyncing: false
     };
   },
   methods: {
-    // Creates a green block when the worker highlights a time slot
-    addAvailability(timeInfo) {
+    // Manually drawing a red block on the calendar
+    addUnavailability(timeInfo) {
       const newBlock = {
-        title: "Available",
+        id: "manual_" + String(Date.now()), 
+        title: "Unavailable",
         start: timeInfo.start,
         end: timeInfo.end,
-        color: "#4CAF50", // Green for available
+        color: "#F44336", // Red for Unavailable
         display: "block"
       };
       
-      this.availabilityBlocks.push(newBlock);
+      this.unavailabilityBlocks = [...this.unavailabilityBlocks, newBlock];
     },
 
-    // Deletes the block if the worker clicks on it again
-    removeAvailability(eventInfo) {
-      if (confirm("Remove this availability block?")) {
-        this.availabilityBlocks = this.availabilityBlocks.filter(
-          block => block.start !== eventInfo.startStr
+    // Clicking a block to delete it
+    removeUnavailability(eventInfo) {
+      if (confirm("Remove this unavailability block?")) {
+        this.unavailabilityBlocks = this.unavailabilityBlocks.filter(
+          block => block.id !== eventInfo.id
         );
       }
     },
 
-    // Handles the modal submit button
-    syncGoogleCalendar() {
+    // Fetching Google events from the backend and turning them into red blocks
+    async syncGoogleCalendar() {
       if (!this.googleIcalLink) return;
       
-      console.log("Sending link to backend for parsing:", this.googleIcalLink);
+      this.isSyncing = true;
       
-      this.showGoogleModal = false;
-      this.googleIcalLink = "";
+      try {
+        // Calls the backend controller we set up earlier
+        const response = await apiClient.post("/calendar/sync", {
+          icalUrl: this.googleIcalLink
+        });
+
+        // Add the returned Google events (red blocks) to our existing manual blocks
+        this.unavailabilityBlocks = [...this.unavailabilityBlocks, ...response];
+        
+        this.showGoogleModal = false;
+        this.googleIcalLink = "";
+        
+      } catch (error) {
+        console.error("Failed to sync calendar:", error);
+        alert("Could not sync calendar. Please check the link and try again.");
+      } finally {
+        this.isSyncing = false;
+      }
     }
   }
 };
