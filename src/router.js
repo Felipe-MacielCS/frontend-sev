@@ -5,6 +5,8 @@ import Signup from "./views/Signup.vue";
 
 //import WorkerDashboard from "./views/WorkerDashBoard.vue"; 
 import ManagerDashboard from "./views/ManagerDashBoard.vue";
+import Tradeboard from "./views/TradeBoard.vue";
+import Budget from "./views/Budget.vue";
 //import AdminDashboard from "./views/AdminDashBoard.vue";
 
 //import WorkerProfile from "./views/WorkerProfile.vue";
@@ -30,6 +32,20 @@ const router = createRouter({
       path: "/manager",
       name: "managerDashboard",
       component: ManagerDashboard,
+      meta: { role: "Manager" },
+    },
+
+    {
+      path: "/manager/tradeboard",
+      name: "tradeboard",
+      component: Tradeboard,
+      meta: { role: "Manager" },
+    },
+
+    {
+      path: "/manager/budget",
+      name: "budget",
+      component: Budget,
       meta: { role: "Manager" },
     },
 
