@@ -6,14 +6,25 @@
         <v-card elevation="2" class="bg-white rounded-lg">
           <v-card-title class="d-flex align-center justify-space-between px-4 pt-3 pb-1">
             <span class="text-subtitle-1 font-weight-bold">Calendar</span>
-            <v-btn
-              icon
-              variant="text"
-              aria-label="Open calendar settings"
-              @click="googleSettingsDialog = true"
-            >
-              <v-icon>mdi-cog-outline</v-icon>
-            </v-btn>
+            <div class="d-flex align-center ga-2">
+              <v-btn
+                color="primary"
+                size="small"
+                variant="flat"
+                prepend-icon="mdi-plus"
+                @click="openQuickAddDialog"
+              >
+                Add
+              </v-btn>
+              <v-btn
+                icon
+                variant="text"
+                aria-label="Open calendar settings"
+                @click="googleSettingsDialog = true"
+              >
+                <v-icon>mdi-cog-outline</v-icon>
+              </v-btn>
+            </div>
           </v-card-title>
 
           <v-card-text class="pa-2">
@@ -90,9 +101,52 @@
         <v-card-title class="text-h6">Add Unavailability</v-card-title>
         <v-card-text>
           <p class="text-body-2 mb-4">
-            Selected time:
-            <strong>{{ formatSelectionRange(pendingSelection) }}</strong>
+            Time range:
+            <strong>{{ formatAddFormRange() }}</strong>
           </p>
+
+          <v-row dense class="mb-1">
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="addForm.startDate"
+                label="Start Date"
+                type="date"
+                density="comfortable"
+                variant="outlined"
+              />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="addForm.startTime"
+                label="Start Time"
+                type="time"
+                density="comfortable"
+                variant="outlined"
+              />
+            </v-col>
+          </v-row>
+
+          <v-row dense class="mb-2">
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="addForm.endDate"
+                label="End Date"
+                type="date"
+                density="comfortable"
+                variant="outlined"
+                :min="addForm.startDate || ''"
+              />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="addForm.endTime"
+                label="End Time"
+                type="time"
+                density="comfortable"
+                variant="outlined"
+              />
+            </v-col>
+          </v-row>
 
           <v-textarea
             v-model="addForm.reason"
@@ -120,7 +174,7 @@
             v-model="addForm.repeatUntil"
             label="Repeat Until"
             type="date"
-            :min="pendingSelection.start ? pendingSelection.start.split('T')[0] : ''"
+            :min="addForm.startDate || ''"
             density="comfortable"
             variant="outlined"
             hint="Create repeats through this date."
@@ -191,7 +245,11 @@ export default {
       addForm: {
         reason: "Manual Block",
         repeatType: "none",
-        repeatUntil: ""
+        repeatUntil: "",
+        startDate: "",
+        startTime: "",
+        endDate: "",
+        endTime: ""
       },
       repeatOptions: [
         { label: "Do not repeat", value: "none" },
@@ -254,6 +312,24 @@ export default {
       return next;
     },
 
+    toDateFromForm(dateValue, timeValue, isEndBoundary = false) {
+      if (!dateValue) return null;
+      const fallback = isEndBoundary ? "23:59:59" : "00:00:00";
+      let t = (timeValue || "").trim();
+      if (!t) t = fallback;
+      if (t.length === 5) t = `${t}:00`;
+      return new Date(`${dateValue}T${t}`);
+    },
+
+    roundUpToHalfHour(dateObj) {
+      const rounded = new Date(dateObj.getTime());
+      rounded.setSeconds(0, 0);
+      const mins = rounded.getMinutes();
+      const add = mins === 0 || mins === 30 ? 0 : mins < 30 ? 30 - mins : 60 - mins;
+      rounded.setMinutes(mins + add);
+      return rounded;
+    },
+
     getDateTime(date, time) {
       if (!date && !time) return null;
       const safeDate = date || "1970-01-01";
@@ -302,6 +378,15 @@ export default {
       return `${this.toLocalDateTime(start)} to ${this.toLocalDateTime(end)}`;
     },
 
+    formatAddFormRange() {
+      const start = this.toDateFromForm(this.addForm.startDate, this.addForm.startTime, false);
+      const end = this.toDateFromForm(this.addForm.endDate, this.addForm.endTime, true);
+      if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        return "Not set";
+      }
+      return `${this.toLocalDateTime(start)} to ${this.toLocalDateTime(end)}`;
+    },
+
     formatEventRange(eventInfo) {
       if (!eventInfo) return "";
       const start = eventInfo.start instanceof Date ? eventInfo.start : this.parseDateTimeInput(eventInfo.start || "", "00:00:00");
@@ -340,11 +425,36 @@ export default {
     },
 
     openAddDialog(timeInfo) {
+      const start = this.parseDateTimeInput(timeInfo.start, "00:00:00");
+      const end = this.parseDateTimeInput(timeInfo.end, "23:59:59");
       this.pendingSelection = { start: timeInfo.start, end: timeInfo.end };
       this.addForm = {
         reason: "Manual Block",
         repeatType: "none",
-        repeatUntil: this.pendingSelection.start ? this.pendingSelection.start.split("T")[0] : ""
+        repeatUntil: start ? this.formatDateLocal(start) : "",
+        startDate: start ? this.formatDateLocal(start) : "",
+        startTime: start ? `${this.pad(start.getHours())}:${this.pad(start.getMinutes())}` : "",
+        endDate: end ? this.formatDateLocal(end) : "",
+        endTime: end ? `${this.pad(end.getHours())}:${this.pad(end.getMinutes())}` : ""
+      };
+      this.addDialog = true;
+    },
+
+    openQuickAddDialog() {
+      const start = this.roundUpToHalfHour(new Date());
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+      this.pendingSelection = {
+        start: this.toLocalDateTime(start),
+        end: this.toLocalDateTime(end)
+      };
+      this.addForm = {
+        reason: "Manual Block",
+        repeatType: "none",
+        repeatUntil: this.formatDateLocal(start),
+        startDate: this.formatDateLocal(start),
+        startTime: `${this.pad(start.getHours())}:${this.pad(start.getMinutes())}`,
+        endDate: this.formatDateLocal(end),
+        endTime: `${this.pad(end.getHours())}:${this.pad(end.getMinutes())}`
       };
       this.addDialog = true;
     },
@@ -355,9 +465,12 @@ export default {
     },
 
     buildSlotsFromSelection() {
-      const baseStart = this.parseDateTimeInput(this.pendingSelection.start, "00:00:00");
-      const baseEnd = this.parseDateTimeInput(this.pendingSelection.end, "23:59:59");
+      const baseStart = this.toDateFromForm(this.addForm.startDate, this.addForm.startTime, false);
+      const baseEnd = this.toDateFromForm(this.addForm.endDate, this.addForm.endTime, true);
       if (!baseStart || !baseEnd || Number.isNaN(baseStart.getTime()) || Number.isNaN(baseEnd.getTime())) {
+        return [];
+      }
+      if (baseEnd <= baseStart) {
         return [];
       }
 
