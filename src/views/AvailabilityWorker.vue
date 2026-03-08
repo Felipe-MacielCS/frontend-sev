@@ -673,13 +673,16 @@ export default {
       try {
         const response = await apiClient.post("/calendar/sync", {
           userID: this.user.userID,
-          skipAllDay: true
+          skipAllDay: true,
+          minDurationMinutes: 1
         });
 
         const imported = response?.imported ?? 0;
         const stats = response?.stats || {};
         const skippedAllDay = stats?.skippedAllDay ?? 0;
-        const skippedZeroDuration = stats?.skippedZeroDuration ?? 0;
+        const skippedNoPeriod = stats?.skippedNoPeriod ?? stats?.skippedZeroDuration ?? 0;
+        const skippedShortDuration = stats?.skippedShortDuration ?? 0;
+        const minDurationMinutes = stats?.minDurationMinutes ?? 1;
 
         this.googleConnected = true;
         await this.fetchSavedBlocks();
@@ -689,7 +692,7 @@ export default {
         } else {
           this.googleStatusType = "info";
           this.googleStatusMessage =
-            `No events imported (0). Skipped all-day: ${skippedAllDay}, skipped zero-duration: ${skippedZeroDuration}.`;
+            `No timed events imported (0). Skipped all-day: ${skippedAllDay}, no time period: ${skippedNoPeriod}, short (<${minDurationMinutes}m): ${skippedShortDuration}.`;
         }
       } catch (error) {
         console.error("Error syncing Google Calendar:", error);
