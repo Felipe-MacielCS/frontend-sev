@@ -64,14 +64,14 @@
           </div>
 
           <!-- Tabs -->
-          <v-tabs v-model="viewDialog.tab" color="primary">
+          <v-tabs v-model="viewDialog.tab" color="primary" class="manager-user-tabs">
             <v-tab value="info">Info</v-tab>
             <v-tab value="calendar">Calendar</v-tab>
           </v-tabs>
 
           <!-- Body -->
-          <div class="flex-grow-1 mt-4" style="overflow: auto;">
-            <v-window v-model="viewDialog.tab">
+          <div class="flex-grow-1 pt-3 manager-user-dialog-body">
+            <v-window v-model="viewDialog.tab" class="manager-user-window">
               <!-- Info tab -->
               <v-window-item value="info">
                 <v-row>
@@ -117,14 +117,13 @@
                   <v-btn variant="text" @click="reloadUserCalendarData">Refresh</v-btn>
                 </div>
 
-                <div style="height: 560px;">
-                  <Calendar
+                <div>
+                  <UserCalendar
                     ref="userCalendar"
                     :events="filteredUserCalendarEvents"
                     initialView="timeGridWeek"
                     :isEditable="false"
                     :isSelectable="false"
-                    :height="560"
                   />
                 </div>
 
@@ -156,11 +155,11 @@
 <script>
 import departmentUsersServices from "../services/departmentUsersServices.js";
 import userServices from "../services/userServices.js";
-import Calendar from "../components/Calendar.vue";
+import UserCalendar from "../components/UserCalendar.vue";
 
 export default {
   name: "ManagerUsers",
-  components: { Calendar },
+  components: { UserCalendar },
   data() {
     return {
       loading: false,
@@ -358,3 +357,21 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.manager-user-tabs {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
+  background: #fff;
+}
+
+.manager-user-dialog-body {
+  overflow: auto;
+  min-height: 0;
+}
+
+.manager-user-window {
+  min-height: 0;
+}
+</style>
