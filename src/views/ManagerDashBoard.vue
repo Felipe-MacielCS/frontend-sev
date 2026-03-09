@@ -54,15 +54,14 @@
 
       <v-col cols="12" md="9">
         <v-card elevation="2" class="pa-2 bg-white rounded-lg">
-          <Calendar 
-            :events="teamShifts" 
-            initialView="timeGridWeek" 
-            :isEditable="true" 
-            :isSelectable="true"
-            @time-selected="openCreateModal"
-            @shift-moved="handleShiftMoved"
-            @shift-clicked="openEditModal"
-          />
+          <Calendar
+              :events="teamShifts"
+              initialView="timeGridWeek"
+              :isEditable="true"
+              :isSelectable="true"
+              :height="'auto'"
+              :contentHeight="700"
+            />
         </v-card>
       </v-col>
 

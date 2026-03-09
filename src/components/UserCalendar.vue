@@ -11,16 +11,13 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 
 export default {
-  name: "Calendar",
+  name: "UserCalendar",
   components: { FullCalendar },
   props: {
     events: { type: Array, required: true },
     initialView: { type: String, default: "timeGridWeek" },
     isEditable: { type: Boolean, default: false },
     isSelectable: { type: Boolean, default: false },
-
-    // ✅ add these
-    height: { type: [Number, String], default: "auto" }, // ex: 520
   },
   data() {
     return {
@@ -32,16 +29,15 @@ export default {
           center: "title",
           right: "dayGridMonth,timeGridWeek,timeGridDay",
         },
-
-        // ✅ makes FullCalendar behave better in constrained containers
-        height: this.height,
+        // Let the dialog body scroll through the entire time-grid day.
+        height: "auto",
         contentHeight: "auto",
-        expandRows: true,
-
+        expandRows: false,
+        slotMinTime: "00:00:00",
+        slotMaxTime: "24:00:00",
         events: this.events,
         editable: this.isEditable,
         selectable: this.isSelectable,
-
         eventClick: (info) => this.$emit("shift-clicked", info.event),
         select: (info) => {
           this.$emit("time-selected", { start: info.startStr, end: info.endStr });
@@ -60,10 +56,6 @@ export default {
   watch: {
     events(newEvents) {
       this.calendarOptions.events = newEvents;
-      this.$nextTick(() => setTimeout(() => this.updateSize(), 0));
-    },
-    height(newH) {
-      this.calendarOptions.height = newH;
       this.$nextTick(() => setTimeout(() => this.updateSize(), 0));
     },
   },
