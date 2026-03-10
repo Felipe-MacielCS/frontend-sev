@@ -1,6 +1,7 @@
 <template>
   <v-container fluid class="pa-6 bg-grey-lighten-4" style="min-height: 100vh;">
     <v-row>
+      <v-col cols="12">
       <v-col cols="12" md="3">
         <v-card class="mb-4 pa-4 bg-grey-lighten-3" elevation="1">
           <h3 class="text-subtitle-1 font-weight-bold mb-3">Current Official Schedule</h3>
@@ -113,6 +114,10 @@ export default {
           return;
         }
 
+:deep(.fc-header-toolbar) {
+ 
+}
+</style>
         const shiftsRes = await shiftServices.getAll({ scheduleID: official.ID });
         const shifts = Array.isArray(shiftsRes) ? shiftsRes : [];
 

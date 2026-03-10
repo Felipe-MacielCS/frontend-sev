@@ -20,7 +20,7 @@
                 icon
                 variant="text"
                 aria-label="Open calendar settings"
-                @click="googleSettingsDialog = true"
+                @click="openGoogleSettingsDialog"
               >
                 <v-icon>mdi-cog-outline</v-icon>
               </v-btn>
@@ -54,7 +54,7 @@
             class="mb-2"
           />
           <p class="text-caption text-medium-emphasis mb-3">
-            Use your private Google Calendar iCal link. All-day events are ignored during import.
+            Use your private Google Calendar iCal link. All event types are imported.
           </p>
 
           <v-alert
@@ -83,7 +83,7 @@
             color="secondary"
             variant="tonal"
             :loading="isSyncingGoogle"
-            :disabled="isSyncingGoogle || !user?.userID || !googleConnected"
+            :disabled="isSyncingGoogle || !user?.userID || !(googleIcalUrl || '').trim()"
             @click="syncGoogleCalendar"
           >
             Import Google Events
@@ -265,6 +265,7 @@ export default {
       googleSettingsDialog: false,
       googleConnected: false,
       googleIcalUrl: "",
+      savedGoogleIcalUrl: "",
       isConnectingGoogle: false,
       isSyncingGoogle: false,
       googleStatusMessage: "",
@@ -622,6 +623,22 @@ export default {
       }
     },
 
+    openGoogleSettingsDialog() {
+      this.googleSettingsDialog = true;
+      if (this.user?.userID) {
+        this.fetchGoogleConnectionStatus();
+      }
+    },
+
+    normalizeIcalUrl(rawUrl) {
+      const trimmed = (rawUrl || "").trim();
+      if (!trimmed) return "";
+      if (trimmed.startsWith("webcal://")) {
+        return `https://${trimmed.slice("webcal://".length)}`;
+      }
+      return trimmed;
+    },
+
     async fetchGoogleConnectionStatus() {
       try {
         const response = await apiClient.get("/calendar/status", {
@@ -629,7 +646,8 @@ export default {
         });
 
         this.googleConnected = Boolean(response?.connected);
-        this.googleIcalUrl = response?.icalUrl || "";
+        this.googleIcalUrl = response?.icalUrl || this.googleIcalUrl || "";
+        this.savedGoogleIcalUrl = response?.icalUrl || "";
       } catch (error) {
         console.error("Error loading Google Calendar status:", error);
       }
@@ -640,7 +658,7 @@ export default {
       this.googleStatusMessage = "";
 
       try {
-        const icalUrl = (this.googleIcalUrl || "").trim();
+        const icalUrl = this.normalizeIcalUrl(this.googleIcalUrl);
         if (!icalUrl) {
           this.googleStatusType = "warning";
           this.googleStatusMessage = "Paste your private iCal URL first.";
@@ -654,6 +672,7 @@ export default {
 
         this.googleConnected = Boolean(response?.connected ?? true);
         this.googleIcalUrl = response?.icalUrl || icalUrl;
+        this.savedGoogleIcalUrl = this.googleIcalUrl;
         this.googleStatusType = "success";
         this.googleStatusMessage = "Google Calendar linked successfully.";
       } catch (error) {
@@ -671,25 +690,52 @@ export default {
       this.googleStatusMessage = "";
 
       try {
+        const icalUrl = this.normalizeIcalUrl(this.googleIcalUrl);
+        if (!icalUrl) {
+          this.googleStatusType = "warning";
+          this.googleStatusMessage = "Paste your private iCal URL first.";
+          return;
+        }
+
+        if (!this.googleConnected || this.savedGoogleIcalUrl !== icalUrl) {
+          await apiClient.post("/calendar/connect", {
+            userID: this.user.userID,
+            icalUrl
+          });
+          this.savedGoogleIcalUrl = icalUrl;
+          this.googleConnected = true;
+        }
+
         const response = await apiClient.post("/calendar/sync", {
           userID: this.user.userID,
-          skipAllDay: true
+          icalUrl,
+          skipAllDay: false,
+          minDurationMinutes: 0,
+          defaultNoPeriodDurationMinutes: 30,
+          defaultAllDayDurationMinutes: 1440
         });
 
         const imported = response?.imported ?? 0;
         const stats = response?.stats || {};
-        const skippedAllDay = stats?.skippedAllDay ?? 0;
-        const skippedZeroDuration = stats?.skippedZeroDuration ?? 0;
+        const assumedNoPeriod = stats?.assumedNoPeriod ?? 0;
+        const defaultNoPeriodDurationMinutes = stats?.defaultNoPeriodDurationMinutes ?? 30;
+        const defaultAllDayDurationMinutes = stats?.defaultAllDayDurationMinutes ?? 1440;
 
+        this.googleIcalUrl = icalUrl;
+        this.savedGoogleIcalUrl = icalUrl;
         this.googleConnected = true;
         await this.fetchSavedBlocks();
+
         if (imported > 0) {
           this.googleStatusType = "success";
-          this.googleStatusMessage = `Google Calendar import complete: ${imported} event(s) imported.`;
+          const assumedPart =
+            assumedNoPeriod > 0
+              ? ` (${assumedNoPeriod} no-end events imported as ${defaultNoPeriodDurationMinutes}m or ${defaultAllDayDurationMinutes}m blocks)`
+              : "";
+          this.googleStatusMessage = `Google Calendar import complete: ${imported} event(s) imported${assumedPart}.`;
         } else {
           this.googleStatusType = "info";
-          this.googleStatusMessage =
-            `No events imported (0). Skipped all-day: ${skippedAllDay}, skipped zero-duration: ${skippedZeroDuration}.`;
+          this.googleStatusMessage = "Import completed, but no events were returned from this feed.";
         }
       } catch (error) {
         console.error("Error syncing Google Calendar:", error);
@@ -708,3 +754,11 @@ export default {
 :deep(.fc-header-toolbar) {
 }
 </style>
+
+
+
+
+
+
+
+
