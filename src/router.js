@@ -5,7 +5,9 @@ import Signup from "./views/Signup.vue";
 
 import WorkerDashboard from "./views/WorkerDashBoard.vue"; 
 import ManagerDashboard from "./views/ManagerDashBoard.vue";
+import ManagerTemplates from "./views/ManagerTemplates.vue";
 import AvailabilityWorker from "./views/AvailabilityWorker.vue";
+import ManagerUsers from "./views/ManagerUsers.vue";
 //import AdminDashboard from "./views/AdminDashBoard.vue";
 
 //import WorkerProfile from "./views/WorkerProfile.vue";
@@ -25,14 +27,28 @@ const router = createRouter({
       component: Signup,
     },
 
-    // --- Manager Routes ---
+    // Manager Routes
     {
       path: "/manager",
       name: "managerDashboard",
       component: ManagerDashboard,
       meta: { role: "Manager" },
     },
+    {
+      path: "/manager/templates",
+      name: "managerTemplates",
+      component: ManagerTemplates,
+      meta: { role: "Manager" },
+    },
+    
+    {
+      path: "/manager/users",
+      name: "managerUsers",
+      component: ManagerUsers,
+      meta: { role: "Manager" },
+    },
 
+    // Worker Routes
     {
       path: "/worker",
       name: "workerDashboard",
@@ -40,7 +56,6 @@ const router = createRouter({
       meta: { role: "Worker" },
     },
 
-    
     {
       path: "/worker/availability",
       name: "workerAvailability",
