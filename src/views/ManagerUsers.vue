@@ -136,9 +136,6 @@
                   No events to display with the current filters.
                 </v-alert>
 
-                <v-alert type="info" variant="tonal" class="mt-3">
-                  Placeholder calendar for now. Later we’ll load shifts + unavailability from the database.
-                </v-alert>
               </v-window-item>
             </v-window>
           </div>
@@ -155,6 +152,9 @@
 <script>
 import departmentUsersServices from "../services/departmentUsersServices.js";
 import userServices from "../services/userServices.js";
+import userShiftServices from "../services/userShiftServices.js";
+import shiftServices from "../services/shiftServices.js";
+import scheduleServices from "../services/scheduleServices.js";
 import UserCalendar from "../components/UserCalendar.vue";
 
 export default {
@@ -307,46 +307,50 @@ export default {
       if (!user?.ID) return;
 
       this.userCalendarEvents = [];
+      try {
+        const departmentID = await this.getManagerDepartmentID();
+        const schedulesRes = await scheduleServices.getAll({
+          departmentID,
+          type: "official",
+          limit: 200,
+        });
+        const officialSchedules = Array.isArray(schedulesRes?.schedules) ? schedulesRes.schedules : [];
+        const officialScheduleIDs = new Set(
+          officialSchedules
+            .map((schedule) => Number(schedule?.ID))
+            .filter((id) => Number.isFinite(id) && id > 0)
+        );
 
-      // ----------------------------------------------------
-      // TODO (later) - pull from DB:
-      // 1) Unavailability:
-      //    const unavail = await unavailableServices.getByUser(user.ID)
-      //    map to: { id, title, start, end, kind: 'unavailability' }
-      //
-      // 2) Shifts:
-      //    const shifts = await usershiftServices.getByUser(user.ID)
-      //    map to: { id, title, start, end, kind: 'shift' }
-      // ----------------------------------------------------
+        const assignmentsRes = await userShiftServices.getAll({ userID: user.ID });
+        const assignments = Array.isArray(assignmentsRes) ? assignmentsRes : [];
+        const shiftIDs = assignments
+          .map((row) => row?.shiftID)
+          .filter((id) => Number.isFinite(Number(id)))
+          .map((id) => Number(id));
 
-      // Placeholder demo events (so the filters work now):
-      const today = new Date();
-      const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, "0");
-      const dd = String(today.getDate()).padStart(2, "0");
-      const base = `${yyyy}-${mm}-${dd}`;
-
-      const demoUnavailability = [
-        {
-          id: `u-${user.ID}-1`,
-          title: "Unavailable (demo)",
-          start: `${base}T10:00:00`,
-          end: `${base}T12:00:00`,
-          kind: "unavailability",
-        },
-      ];
-
-      const demoShifts = [
-        {
-          id: `s-${user.ID}-1`,
-          title: "Shift (demo)",
-          start: `${base}T14:00:00`,
-          end: `${base}T18:00:00`,
-          kind: "shift",
-        },
-      ];
-
-      this.userCalendarEvents = [...demoUnavailability, ...demoShifts];
+        if (shiftIDs.length === 0) {
+          this.userCalendarEvents = [];
+        } else {
+          const shifts = await Promise.all(shiftIDs.map((id) => shiftServices.get(id)));
+          this.userCalendarEvents = shifts
+            .filter(
+              (shift) =>
+                !!shift &&
+                officialScheduleIDs.has(Number(shift.scheduleID))
+            )
+            .map((shift) => ({
+              id: `shift-${shift.ID}`,
+              title: "Assigned Shift",
+              start: `${shift.shift_date}T${String(shift.start_time || "").slice(0, 5)}:00`,
+              end: `${shift.shift_date}T${String(shift.end_time || "").slice(0, 5)}:00`,
+              kind: "shift",
+              color: "#2e7d32",
+            }));
+        }
+      } catch (e) {
+        console.error("Failed to load user calendar data:", e?.response?.data || e);
+        this.userCalendarEvents = [];
+      }
 
       this.$nextTick(() => {
         setTimeout(() => {
