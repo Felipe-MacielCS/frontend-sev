@@ -18,9 +18,8 @@ export default {
     initialView: { type: String, default: "timeGridWeek" },
     isEditable: { type: Boolean, default: false },
     isSelectable: { type: Boolean, default: false },
-
-    // ✅ add these
-    height: { type: [Number, String], default: "auto" }, // ex: 520
+    height: { type: [Number, String], default: "auto" },
+    contentHeight: { type: [Number, String], default: "auto" },
   },
   data() {
     return {
@@ -32,16 +31,12 @@ export default {
           center: "title",
           right: "dayGridMonth,timeGridWeek,timeGridDay",
         },
-
-        // ✅ makes FullCalendar behave better in constrained containers
         height: this.height,
-        contentHeight: "auto",
+        contentHeight: this.contentHeight,
         expandRows: true,
-
         events: this.events,
         editable: this.isEditable,
         selectable: this.isSelectable,
-
         eventClick: (info) => this.$emit("shift-clicked", info.event),
         select: (info) => {
           this.$emit("time-selected", { start: info.startStr, end: info.endStr });
@@ -56,6 +51,10 @@ export default {
       const api = this.$refs.fc?.getApi();
       if (api) api.updateSize();
     },
+    goToDate(dateStr) {
+      const api = this.$refs.fc?.getApi();
+      if (api && dateStr) api.gotoDate(dateStr);
+    },
   },
   watch: {
     events(newEvents) {
@@ -64,6 +63,10 @@ export default {
     },
     height(newH) {
       this.calendarOptions.height = newH;
+      this.$nextTick(() => setTimeout(() => this.updateSize(), 0));
+    },
+    contentHeight(newH) {
+      this.calendarOptions.contentHeight = newH;
       this.$nextTick(() => setTimeout(() => this.updateSize(), 0));
     },
   },
