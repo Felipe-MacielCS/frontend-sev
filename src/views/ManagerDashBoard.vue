@@ -69,16 +69,6 @@
           />
 
           <v-text-field
-            :model-value="computedScheduleRangeLabel"
-            label="Date Range"
-            variant="solo"
-            density="compact"
-            hide-details
-            readonly
-            class="mb-3"
-          />
-
-          <v-text-field
             v-model="newSchedule.name"
             :label="newSchedule.type === 'template' ? 'Template Name' : 'Schedule Name (Optional)'"
             variant="solo"
@@ -86,6 +76,11 @@
             hide-details
             class="mb-3"
           />
+
+          <div class="mb-3 text-body-2">
+            <b>Range:</b>
+            {{ computedScheduleRangeLabel || "Choose a week to generate the range." }}
+          </div>
 
           <v-btn
             color="primary"
@@ -115,9 +110,6 @@
           />
 
           <div v-if="selectedSchedule" class="text-body-2">
-            <div><b>Name:</b> {{ selectedSchedule.name || "Untitled" }}</div>
-            <div><b>Range:</b> {{ selectedSchedule.start_date }} to {{ selectedSchedule.end_date }}</div>
-
             <v-text-field
               v-model="scheduleEditor.name"
               label="Name"
@@ -138,6 +130,9 @@
               hide-details
               class="mb-2"
             />
+
+            <div class="mb-2"><b>Name:</b> {{ selectedSchedule.name || "Untitled" }}</div>
+            <div><b>Range:</b> {{ selectedSchedule.start_date }} to {{ selectedSchedule.end_date }}</div>
 
             <div class="d-flex ga-2 mt-2">
               <v-btn
@@ -257,6 +252,22 @@
       </v-col>
 
       <v-col cols="12" md="9">
+        <div class="d-flex align-center justify-space-between mb-3 px-1">
+          <div>
+            <div class="text-h6 font-weight-bold">{{ currentCalendarScheduleName }}</div>
+            <div v-if="currentCalendarSchedule" class="text-body-2 text-medium-emphasis">
+              {{ currentCalendarSchedule.start_date }} to {{ currentCalendarSchedule.end_date }}
+            </div>
+          </div>
+          <v-chip
+            v-if="currentCalendarScheduleTypeLabel"
+            color="primary"
+            variant="tonal"
+            size="small"
+          >
+            {{ currentCalendarScheduleTypeLabel }}
+          </v-chip>
+        </div>
         <v-card elevation="2" class="pa-2 bg-white rounded-lg">
           <Calendar
             ref="managerCalendar"
@@ -266,6 +277,7 @@
             :isSelectable="true"
             :height="760"
             :contentHeight="700"
+            @dates-changed="saveSessionState"
             @time-selected="openCreateShiftModal"
             @shift-clicked="openEditShiftModal"
           />
@@ -404,6 +416,8 @@ import departmentUsersServices from "../services/departmentUsersServices.js";
 import userServices from "../services/userServices.js";
 import positionServices from "../services/positionServices.js";
 
+const SESSION_STORAGE_KEY = "manager-schedule-page-state-v1";
+
 export default {
   name: "ManagerDashBoard",
   components: { Calendar },
@@ -418,7 +432,7 @@ export default {
       isDeletingTemplate: false,
 
       managerDepartmentID: null,
-      activePanel: "create",
+      activePanel: "schedules",
 
       newSchedule: {
         anchor_date: "",
@@ -440,6 +454,7 @@ export default {
 
       schedules: [],
       selectedScheduleID: null,
+      lastScheduleTabSelectionID: null,
       scheduleEditor: {
         name: "",
         type: "draft",
@@ -515,7 +530,7 @@ export default {
         .filter((s) => s.type === "template")
         .map((s) => ({
           value: s.ID,
-          label: `${s.name || "Untitled Template"} | ${s.start_date} to ${s.end_date}`,
+          label: s.name || "Untitled Template",
         }));
     },
 
@@ -555,11 +570,27 @@ export default {
         .filter((s) => s.type !== "template")
         .map((s) => ({
           value: s.ID,
-          label: `${s.name || "Untitled Schedule"} | ${s.type} | ${s.start_date} to ${s.end_date}`,
+          label: `${s.name || "Untitled Schedule"} | ${s.type}`,
         }));
     },
     firstScheduleID() {
       return this.scheduleItems[0]?.value || null;
+    },
+
+    currentCalendarSchedule() {
+      return this.schedules.find((s) => Number(s.ID) === Number(this.selectedScheduleID)) || null;
+    },
+
+    currentCalendarScheduleName() {
+      const schedule = this.currentCalendarSchedule;
+      if (!schedule) return "No schedule selected";
+      return schedule.name || (schedule.type === "template" ? "Untitled Template" : "Untitled Schedule");
+    },
+
+    currentCalendarScheduleTypeLabel() {
+      const schedule = this.currentCalendarSchedule;
+      if (!schedule?.type) return "";
+      return String(schedule.type).charAt(0).toUpperCase() + String(schedule.type).slice(1);
     },
 
     positionItems() {
@@ -624,9 +655,17 @@ export default {
 
   watch: {
     async activePanel(next) {
+      this.saveSessionState();
       if (next === "schedules") {
+        const preferredScheduleID =
+          this.lastScheduleTabSelectionID && this.schedules.some(
+            (s) => Number(s.ID) === Number(this.lastScheduleTabSelectionID) && s.type !== "template"
+          )
+            ? this.lastScheduleTabSelectionID
+            : this.firstScheduleID;
+
         if (!this.selectedScheduleID || !this.schedules.some((s) => Number(s.ID) === Number(this.selectedScheduleID) && s.type !== "template")) {
-          this.selectedScheduleID = this.firstScheduleID;
+          this.selectedScheduleID = preferredScheduleID;
         }
         if (this.selectedScheduleID) await this.onScheduleSelected();
       }
@@ -636,6 +675,31 @@ export default {
         }
         if (this.templateApply.templateScheduleID) await this.onTemplateSelected();
       }
+    },
+    selectedScheduleID() {
+      if (
+        this.schedules.some(
+          (s) => Number(s.ID) === Number(this.selectedScheduleID) && s.type !== "template"
+        )
+      ) {
+        this.lastScheduleTabSelectionID = this.selectedScheduleID;
+      }
+      this.saveSessionState();
+    },
+    "templateApply.templateScheduleID"() {
+      this.saveSessionState();
+    },
+    newSchedule: {
+      handler() {
+        this.saveSessionState();
+      },
+      deep: true,
+    },
+    templateApply: {
+      handler() {
+        this.saveSessionState();
+      },
+      deep: true,
     },
   },
 
@@ -681,6 +745,7 @@ export default {
       this.$nextTick(() => {
         this.$refs.managerCalendar?.goToDate?.(dateStr);
         this.$refs.managerCalendar?.updateSize?.();
+        this.saveSessionState();
       });
     },
 
@@ -699,16 +764,81 @@ export default {
       this.snackbar = { show: true, message, color };
     },
 
+    readSessionState() {
+      try {
+        const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) {
+        console.warn("Could not read manager schedule page state:", e);
+        return null;
+      }
+    },
+
+    saveSessionState() {
+      try {
+        sessionStorage.setItem(
+          SESSION_STORAGE_KEY,
+          JSON.stringify({
+            activePanel: this.activePanel,
+            selectedScheduleID: this.selectedScheduleID,
+            lastScheduleTabSelectionID: this.lastScheduleTabSelectionID,
+            templateScheduleID: this.templateApply.templateScheduleID,
+            calendarDate:
+              this.$refs.managerCalendar?.getCurrentDate?.() ||
+              this.currentCalendarSchedule?.start_date ||
+              null,
+            newSchedule: this.newSchedule,
+            templateApply: this.templateApply,
+          })
+        );
+      } catch (e) {
+        console.warn("Could not save manager schedule page state:", e);
+      }
+    },
+
+    getOfficialScheduleID() {
+      return (
+        this.schedules.find((schedule) => schedule.type === "official")?.ID ||
+        null
+      );
+    },
+
+    getPreferredDefaultScheduleID() {
+      return this.getOfficialScheduleID() || this.firstScheduleID || null;
+    },
+
+    restoreSessionState() {
+      const state = this.readSessionState();
+      if (!state) return null;
+
+      this.activePanel = state.activePanel || "schedules";
+      this.selectedScheduleID = state.selectedScheduleID || null;
+      this.lastScheduleTabSelectionID = state.lastScheduleTabSelectionID || null;
+      this.templateApply = {
+        ...this.templateApply,
+        ...(state.templateApply || {}),
+        templateScheduleID: state.templateScheduleID || state.templateApply?.templateScheduleID || null,
+      };
+      this.newSchedule = {
+        ...this.newSchedule,
+        ...(state.newSchedule || {}),
+      };
+
+      return state;
+    },
+
     refreshScheduleEditorFromSelected() {
       const s = this.selectedSchedule;
       if (!s) {
         this.scheduleEditor = { name: "", type: "draft" };
+        this.saveSessionState();
         return;
       }
       this.scheduleEditor = {
         name: s.name || "",
         type: s.type || "draft",
       };
+      this.saveSessionState();
     },
 
     async updateSelectedScheduleMeta() {
@@ -744,7 +874,10 @@ export default {
         await scheduleServices.delete(deletingID);
 
         this.schedules = this.schedules.filter((s) => Number(s.ID) !== Number(deletingID));
-        this.selectedScheduleID = this.schedules[0]?.ID || null;
+        if (Number(this.lastScheduleTabSelectionID) === Number(deletingID)) {
+          this.lastScheduleTabSelectionID = null;
+        }
+        this.selectedScheduleID = this.getPreferredDefaultScheduleID();
 
         if (this.selectedScheduleID) {
           await this.loadShiftsForSelectedSchedule();
@@ -841,6 +974,9 @@ export default {
 
         await this.loadSchedules();
         this.selectedScheduleID = newScheduleID;
+        if (this.templateApply.type !== "template") {
+          this.lastScheduleTabSelectionID = newScheduleID;
+        }
         await this.loadShiftsForSelectedSchedule();
         this.jumpCalendarToDate(createdSchedule?.start_date || this.toISODate(targetStart));
         this.refreshScheduleEditorFromSelected();
@@ -881,7 +1017,9 @@ export default {
           return;
         }
 
+        const restoredState = this.restoreSessionState();
         await Promise.all([this.loadWorkers(), this.loadPositions(), this.loadSchedules()]);
+
         const routeScheduleID = Number(this.$route?.query?.scheduleID);
         const routeTemplateID = Number(this.$route?.query?.templateID);
         if (Number.isFinite(routeScheduleID) && routeScheduleID > 0) {
@@ -892,15 +1030,48 @@ export default {
             await this.loadShiftsForSelectedSchedule();
             this.jumpCalendarToDate(this.selectedSchedule?.start_date);
             this.refreshScheduleEditorFromSelected();
+            this.saveSessionState();
           }
+          return;
         }
         if (Number.isFinite(routeTemplateID) && routeTemplateID > 0) {
           const exists = this.schedules.some((s) => Number(s.ID) === routeTemplateID && s.type === "template");
           if (exists) {
             this.activePanel = "templates";
             this.templateApply.templateScheduleID = routeTemplateID;
+            await this.onTemplateSelected();
+            this.saveSessionState();
           }
+          return;
         }
+
+        if (
+          restoredState?.selectedScheduleID &&
+          this.schedules.some((s) => Number(s.ID) === Number(restoredState.selectedScheduleID))
+        ) {
+          this.selectedScheduleID = restoredState.selectedScheduleID;
+          if (this.activePanel === "templates") {
+            this.templateApply.templateScheduleID =
+              restoredState.templateScheduleID || this.templateApply.templateScheduleID;
+            if (this.templateApply.templateScheduleID) {
+              await this.onTemplateSelected();
+            }
+          } else {
+            this.activePanel = "schedules";
+            await this.onScheduleSelected();
+          }
+          this.jumpCalendarToDate(restoredState.calendarDate || this.currentCalendarSchedule?.start_date);
+          this.saveSessionState();
+          return;
+        }
+
+        this.activePanel = "schedules";
+        this.selectedScheduleID = this.getPreferredDefaultScheduleID();
+        if (this.selectedScheduleID) {
+          await this.onScheduleSelected();
+          this.jumpCalendarToDate(this.currentCalendarSchedule?.start_date);
+        }
+        this.saveSessionState();
       } catch (e) {
         console.error(e);
         this.showMessage("Failed to load manager scheduling data.", "error");
@@ -953,7 +1124,16 @@ export default {
         limit: 200,
       });
 
-      this.schedules = Array.isArray(res?.schedules) ? res.schedules : [];
+        this.schedules = Array.isArray(res?.schedules) ? res.schedules : [];
+      const scheduleIDs = new Set(
+        this.schedules.filter((s) => s.type !== "template").map((s) => Number(s.ID))
+      );
+      if (
+        this.lastScheduleTabSelectionID &&
+        !scheduleIDs.has(Number(this.lastScheduleTabSelectionID))
+      ) {
+        this.lastScheduleTabSelectionID = null;
+      }
       if (
         this.selectedScheduleID &&
         !this.schedules.some((s) => Number(s.ID) === Number(this.selectedScheduleID))
@@ -962,7 +1142,7 @@ export default {
       }
 
       if (!this.selectedScheduleID && this.schedules.length > 0) {
-        this.selectedScheduleID = this.firstScheduleID || this.schedules[0].ID;
+        this.selectedScheduleID = this.getPreferredDefaultScheduleID() || this.schedules[0].ID;
         await this.loadShiftsForSelectedSchedule();
         const first = this.schedules.find((s) => Number(s.ID) === Number(this.selectedScheduleID)) || this.schedules[0];
         this.jumpCalendarToDate(first?.start_date);
@@ -996,6 +1176,9 @@ export default {
 
         this.schedules = [createdSchedule, ...this.schedules];
         this.selectedScheduleID = createdSchedule?.ID ?? this.selectedScheduleID;
+        if (this.newSchedule.type !== "template") {
+          this.lastScheduleTabSelectionID = createdSchedule?.ID ?? this.lastScheduleTabSelectionID;
+        }
         this.activePanel = this.newSchedule.type === "template" ? "templates" : "schedules";
         if (this.newSchedule.type === "template") {
           this.templateApply.templateScheduleID = createdSchedule?.ID ?? this.templateApply.templateScheduleID;
@@ -1005,6 +1188,7 @@ export default {
         this.refreshScheduleEditorFromSelected();
 
         this.showMessage(`Schedule created as ${this.newSchedule.type} (${this.newSchedule.cadence}).`);
+        this.saveSessionState();
       } catch (e) {
         console.error(e);
         this.showMessage("Failed to create schedule.", "error");
@@ -1014,9 +1198,17 @@ export default {
     },
 
     async onScheduleSelected() {
+      if (
+        this.schedules.some(
+          (s) => Number(s.ID) === Number(this.selectedScheduleID) && s.type !== "template"
+        )
+      ) {
+        this.lastScheduleTabSelectionID = this.selectedScheduleID;
+      }
       await this.loadShiftsForSelectedSchedule();
       this.jumpCalendarToDate(this.selectedSchedule?.start_date);
       this.refreshScheduleEditorFromSelected();
+      this.saveSessionState();
     },
 
     async onTemplateSelected() {
@@ -1029,6 +1221,7 @@ export default {
       this.selectedScheduleID = templateID;
       await this.loadShiftsForSelectedSchedule();
       this.jumpCalendarToDate(template.start_date);
+      this.saveSessionState();
     },
 
     async loadShiftsForSelectedSchedule() {
