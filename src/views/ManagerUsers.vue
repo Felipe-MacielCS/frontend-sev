@@ -150,6 +150,7 @@
 </template>
 
 <script>
+import apiClient from "../services/services.js";
 import departmentUsersServices from "../services/departmentUsersServices.js";
 import userServices from "../services/userServices.js";
 import userShiftServices from "../services/userShiftServices.js";
@@ -226,6 +227,83 @@ export default {
   },
 
   methods: {
+    isNotFound(error) {
+      return Boolean(error?.response?.status === 404);
+    },
+
+    getDateTime(date, time) {
+      if (!date && !time) return null;
+      const safeDate = date || "1970-01-01";
+      const safeTime = (time || "00:00:00").toString().substring(0, 8);
+      return `${safeDate}T${safeTime}`;
+    },
+
+    getUserId(user) {
+      return user?.ID ?? user?.id ?? user?.userID ?? null;
+    },
+
+    normalizeUnavailabilityEvent(rawBlock) {
+      const start =
+        rawBlock?.start ||
+        rawBlock?.startDateTime ||
+        rawBlock?.start_datetime ||
+        this.getDateTime(rawBlock?.start_date, rawBlock?.start_time);
+      const end =
+        rawBlock?.end ||
+        rawBlock?.endDateTime ||
+        rawBlock?.end_datetime ||
+        this.getDateTime(rawBlock?.end_date, rawBlock?.end_time);
+      const id =
+        rawBlock?.unavailabilityID ||
+        rawBlock?.unavailableID ||
+        rawBlock?.ID ||
+        rawBlock?.id;
+
+      if (!id || !start || !end) return null;
+
+      return {
+        id: `unavailability-${id}`,
+        title: rawBlock?.reason || rawBlock?.title || "Unavailable",
+        start,
+        end,
+        kind: "unavailability",
+        color: "#c62828",
+      };
+    },
+
+    async fetchUserUnavailability(userID) {
+      const endpoints = [
+        { path: `/unavailable/user/${userID}` },
+        { path: "/unavailable", params: { userID } },
+        { path: "/unavailable" },
+      ];
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await apiClient.get(endpoint.path, {
+            params: endpoint.params || {},
+          });
+          const blocks = response?.unavailabilities || response?.data || response;
+
+          if (Array.isArray(blocks)) {
+            return blocks.filter((block) => {
+              if (endpoint.path !== "/unavailable") return true;
+              const blockUserID =
+                block?.userID ?? block?.userId ?? block?.UserID ?? block?.employeeID ?? null;
+              return String(blockUserID) === String(userID);
+            });
+          }
+        } catch (error) {
+          if (!this.isNotFound(error)) {
+            console.error("Failed to load user unavailability:", error?.response?.data || error);
+            return [];
+          }
+        }
+      }
+
+      return [];
+    },
+
     async getManagerDepartmentID() {
       const raw = localStorage.getItem("user");
       const stored = raw ? JSON.parse(raw) : null;
@@ -304,16 +382,21 @@ export default {
 
     async reloadUserCalendarData() {
       const user = this.viewDialog.user;
-      if (!user?.ID) return;
+      const userID = this.getUserId(user);
+      if (!userID) return;
 
       this.userCalendarEvents = [];
       try {
         const departmentID = await this.getManagerDepartmentID();
-        const schedulesRes = await scheduleServices.getAll({
-          departmentID,
-          type: "official",
-          limit: 200,
-        });
+        const [schedulesRes, assignmentsRes, unavailabilityBlocks] = await Promise.all([
+          scheduleServices.getAll({
+            departmentID,
+            type: "official",
+            limit: 200,
+          }),
+          userShiftServices.getAll({ userID }),
+          this.fetchUserUnavailability(userID),
+        ]);
         const officialSchedules = Array.isArray(schedulesRes?.schedules) ? schedulesRes.schedules : [];
         const officialScheduleIDs = new Set(
           officialSchedules
@@ -321,32 +404,35 @@ export default {
             .filter((id) => Number.isFinite(id) && id > 0)
         );
 
-        const assignmentsRes = await userShiftServices.getAll({ userID: user.ID });
         const assignments = Array.isArray(assignmentsRes) ? assignmentsRes : [];
         const shiftIDs = assignments
           .map((row) => row?.shiftID)
           .filter((id) => Number.isFinite(Number(id)))
           .map((id) => Number(id));
 
-        if (shiftIDs.length === 0) {
-          this.userCalendarEvents = [];
-        } else {
-          const shifts = await Promise.all(shiftIDs.map((id) => shiftServices.get(id)));
-          this.userCalendarEvents = shifts
-            .filter(
-              (shift) =>
-                !!shift &&
-                officialScheduleIDs.has(Number(shift.scheduleID))
-            )
-            .map((shift) => ({
-              id: `shift-${shift.ID}`,
-              title: "Assigned Shift",
-              start: `${shift.shift_date}T${String(shift.start_time || "").slice(0, 5)}:00`,
-              end: `${shift.shift_date}T${String(shift.end_time || "").slice(0, 5)}:00`,
-              kind: "shift",
-              color: "#2e7d32",
-            }));
-        }
+        const shiftEvents =
+          shiftIDs.length === 0
+            ? []
+            : (await Promise.all(shiftIDs.map((id) => shiftServices.get(id))))
+                .filter(
+                  (shift) =>
+                    !!shift &&
+                    officialScheduleIDs.has(Number(shift.scheduleID))
+                )
+                .map((shift) => ({
+                  id: `shift-${shift.ID}`,
+                  title: "Assigned Shift",
+                  start: `${shift.shift_date}T${String(shift.start_time || "").slice(0, 5)}:00`,
+                  end: `${shift.shift_date}T${String(shift.end_time || "").slice(0, 5)}:00`,
+                  kind: "shift",
+                  color: "#2e7d32",
+                }));
+
+        const unavailabilityEvents = unavailabilityBlocks
+          .map((block) => this.normalizeUnavailabilityEvent(block))
+          .filter(Boolean);
+
+        this.userCalendarEvents = [...unavailabilityEvents, ...shiftEvents];
       } catch (e) {
         console.error("Failed to load user calendar data:", e?.response?.data || e);
         this.userCalendarEvents = [];
