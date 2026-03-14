@@ -11,15 +11,13 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 
 export default {
-  name: "Calendar",
+  name: "UserCalendar",
   components: { FullCalendar },
   props: {
     events: { type: Array, required: true },
     initialView: { type: String, default: "timeGridWeek" },
     isEditable: { type: Boolean, default: false },
     isSelectable: { type: Boolean, default: false },
-    height: { type: [Number, String], default: "auto" },
-    contentHeight: { type: [Number, String], default: "auto" },
   },
   data() {
     return {
@@ -31,9 +29,12 @@ export default {
           center: "title",
           right: "dayGridMonth,timeGridWeek,timeGridDay",
         },
-        height: this.height,
-        contentHeight: this.contentHeight,
-        expandRows: true,
+        // Let the dialog body scroll through the entire time-grid day.
+        height: "auto",
+        contentHeight: "auto",
+        expandRows: false,
+        slotMinTime: "00:00:00",
+        slotMaxTime: "24:00:00",
         events: this.events,
         editable: this.isEditable,
         selectable: this.isSelectable,
@@ -51,22 +52,10 @@ export default {
       const api = this.$refs.fc?.getApi();
       if (api) api.updateSize();
     },
-    goToDate(dateStr) {
-      const api = this.$refs.fc?.getApi();
-      if (api && dateStr) api.gotoDate(dateStr);
-    },
   },
   watch: {
     events(newEvents) {
       this.calendarOptions.events = newEvents;
-      this.$nextTick(() => setTimeout(() => this.updateSize(), 0));
-    },
-    height(newH) {
-      this.calendarOptions.height = newH;
-      this.$nextTick(() => setTimeout(() => this.updateSize(), 0));
-    },
-    contentHeight(newH) {
-      this.calendarOptions.contentHeight = newH;
       this.$nextTick(() => setTimeout(() => this.updateSize(), 0));
     },
   },
