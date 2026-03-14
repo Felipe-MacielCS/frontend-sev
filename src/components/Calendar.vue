@@ -37,6 +37,7 @@ export default {
         events: this.events,
         editable: this.isEditable,
         selectable: this.isSelectable,
+        datesSet: (info) => this.$emit("dates-changed", info),
         eventClick: (info) => this.$emit("shift-clicked", info.event),
         select: (info) => {
           this.$emit("time-selected", { start: info.startStr, end: info.endStr });
@@ -54,6 +55,14 @@ export default {
     goToDate(dateStr) {
       const api = this.$refs.fc?.getApi();
       if (api && dateStr) api.gotoDate(dateStr);
+    },
+    getCurrentDate() {
+      const api = this.$refs.fc?.getApi();
+      if (!api) return null;
+      const current = api.getDate();
+      return current instanceof Date && !Number.isNaN(current.getTime())
+        ? current.toISOString().slice(0, 10)
+        : null;
     },
   },
   watch: {
