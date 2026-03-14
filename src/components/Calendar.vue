@@ -34,6 +34,7 @@ export default {
         height: this.height,
         contentHeight: this.contentHeight,
         expandRows: true,
+        slotMinTime: "05:00:00",
         events: this.events,
         editable: this.isEditable,
         selectable: this.isSelectable,
