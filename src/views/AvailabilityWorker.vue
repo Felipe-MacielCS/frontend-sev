@@ -6,25 +6,15 @@
         <v-card elevation="2" class="bg-white rounded-lg">
           <v-card-title class="d-flex align-center justify-space-between px-4 pt-3 pb-1">
             <span class="text-subtitle-1 font-weight-bold">Calendar</span>
-            <div class="d-flex align-center ga-2">
-              <v-btn
-                color="primary"
-                size="small"
-                variant="flat"
-                prepend-icon="mdi-plus"
-                @click="openQuickAddDialog"
-              >
-                Add
-              </v-btn>
-              <v-btn
-                icon
-                variant="text"
-                aria-label="Open calendar settings"
-                @click="openGoogleSettingsDialog"
-              >
-                <v-icon>mdi-cog-outline</v-icon>
-              </v-btn>
-            </div>
+            <v-btn
+              color="primary"
+              size="small"
+              variant="flat"
+              prepend-icon="mdi-plus"
+              @click="openQuickAddDialog"
+            >
+              Add
+            </v-btn>
           </v-card-title>
 
           <v-card-text class="pa-2">
@@ -34,71 +24,18 @@
               :isEditable="true"
               :isSelectable="true"
               @time-selected="openAddDialog"
-              @shift-clicked="openDeleteDialog"
+              @shift-clicked="openEditDialog"
             />
           </v-card-text>
         </v-card>
       </v-col>
     </v-row>
 
-    <v-dialog v-model="googleSettingsDialog" max-width="520">
-      <v-card>
-        <v-card-title class="text-h6">Google Calendar Settings</v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-model="googleIcalUrl"
-            label="Private iCal URL"
-            placeholder="webcal://... or https://..."
-            density="comfortable"
-            variant="outlined"
-            class="mb-2"
-          />
-          <p class="text-caption text-medium-emphasis mb-3">
-            Use your private Google Calendar iCal link. All event types are imported.
-          </p>
-
-          <v-alert
-            v-if="googleStatusMessage"
-            :type="googleStatusType"
-            density="compact"
-            variant="tonal"
-            class="mb-3"
-          >
-            {{ googleStatusMessage }}
-          </v-alert>
-
-          <v-btn
-            block
-            color="primary"
-            class="mb-2"
-            :loading="isConnectingGoogle"
-            :disabled="isConnectingGoogle || !user?.userID"
-            @click="connectGoogleCalendar"
-          >
-            {{ googleConnected ? "Reconnect Google Calendar" : "Link Google Calendar" }}
-          </v-btn>
-
-          <v-btn
-            block
-            color="secondary"
-            variant="tonal"
-            :loading="isSyncingGoogle"
-            :disabled="isSyncingGoogle || !user?.userID || !(googleIcalUrl || '').trim()"
-            @click="syncGoogleCalendar"
-          >
-            Import Google Events
-          </v-btn>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="googleSettingsDialog = false">Close</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
     <v-dialog v-model="addDialog" max-width="560">
       <v-card>
-        <v-card-title class="text-h6">Add Unavailability</v-card-title>
+        <v-card-title class="text-h6">
+          {{ editingBlockId ? "Edit Unavailability" : "Add Unavailability" }}
+        </v-card-title>
         <v-card-text>
           <p class="text-body-2 mb-4">
             Time range:
@@ -148,17 +85,8 @@
             </v-col>
           </v-row>
 
-          <v-textarea
-            v-model="addForm.reason"
-            label="Reason (optional)"
-            density="comfortable"
-            rows="2"
-            auto-grow
-            variant="outlined"
-            class="mb-3"
-          />
-
           <v-select
+            v-if="!editingBlockId"
             v-model="addForm.repeatType"
             :items="repeatOptions"
             item-title="label"
@@ -170,7 +98,7 @@
           />
 
           <v-text-field
-            v-if="addForm.repeatType !== 'none'"
+            v-if="!editingBlockId && addForm.repeatType !== 'none'"
             v-model="addForm.repeatUntil"
             label="Repeat Until"
             type="date"
@@ -182,10 +110,18 @@
           />
         </v-card-text>
         <v-card-actions>
+          <v-btn
+            v-if="editingBlockId"
+            color="error"
+            variant="text"
+            @click="openDeleteDialogFromEdit"
+          >
+            Delete
+          </v-btn>
           <v-spacer />
           <v-btn variant="text" @click="closeAddDialog">Cancel</v-btn>
           <v-btn color="primary" :loading="isSavingUnavailability" @click="saveUnavailability">
-            Save
+            {{ editingBlockId ? "Update" : "Save" }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -240,10 +176,10 @@ export default {
       deleteDialog: false,
       isSavingUnavailability: false,
       isDeletingUnavailability: false,
+      editingBlockId: null,
       pendingSelection: { start: "", end: "" },
       pendingDeleteEvent: null,
       addForm: {
-        reason: "Manual Block",
         repeatType: "none",
         repeatUntil: "",
         startDate: "",
@@ -260,22 +196,12 @@ export default {
         show: false,
         message: "",
         color: "success"
-      },
-
-      googleSettingsDialog: false,
-      googleConnected: false,
-      googleIcalUrl: "",
-      savedGoogleIcalUrl: "",
-      isConnectingGoogle: false,
-      isSyncingGoogle: false,
-      googleStatusMessage: "",
-      googleStatusType: "info"
+      }
     };
   },
   mounted() {
     if (this.user && this.user.userID) {
       this.fetchSavedBlocks();
-      this.fetchGoogleConnectionStatus();
     }
   },
   methods: {
@@ -356,11 +282,23 @@ export default {
           rawBlock.unavailableID ||
           rawBlock.ID ||
           rawBlock.id,
-        title: rawBlock.title || "Unavailable",
+        title: rawBlock.title || rawBlock.reason || "Unavailable",
         start,
         end,
+        reason: rawBlock.reason || rawBlock.title || "",
         color: "#F44336",
         display: "block"
+      };
+    },
+
+    getFormState(start, end) {
+      return {
+        repeatType: "none",
+        repeatUntil: start ? this.formatDateLocal(start) : "",
+        startDate: start ? this.formatDateLocal(start) : "",
+        startTime: start ? `${this.pad(start.getHours())}:${this.pad(start.getMinutes())}` : "",
+        endDate: end ? this.formatDateLocal(end) : "",
+        endTime: end ? `${this.pad(end.getHours())}:${this.pad(end.getMinutes())}` : ""
       };
     },
 
@@ -428,40 +366,49 @@ export default {
     openAddDialog(timeInfo) {
       const start = this.parseDateTimeInput(timeInfo.start, "00:00:00");
       const end = this.parseDateTimeInput(timeInfo.end, "23:59:59");
+      this.editingBlockId = null;
       this.pendingSelection = { start: timeInfo.start, end: timeInfo.end };
-      this.addForm = {
-        reason: "Manual Block",
-        repeatType: "none",
-        repeatUntil: start ? this.formatDateLocal(start) : "",
-        startDate: start ? this.formatDateLocal(start) : "",
-        startTime: start ? `${this.pad(start.getHours())}:${this.pad(start.getMinutes())}` : "",
-        endDate: end ? this.formatDateLocal(end) : "",
-        endTime: end ? `${this.pad(end.getHours())}:${this.pad(end.getMinutes())}` : ""
-      };
+      this.addForm = this.getFormState(start, end);
       this.addDialog = true;
     },
 
     openQuickAddDialog() {
       const start = this.roundUpToHalfHour(new Date());
       const end = new Date(start.getTime() + 60 * 60 * 1000);
+      this.editingBlockId = null;
       this.pendingSelection = {
         start: this.toLocalDateTime(start),
         end: this.toLocalDateTime(end)
       };
-      this.addForm = {
-        reason: "Manual Block",
-        repeatType: "none",
-        repeatUntil: this.formatDateLocal(start),
-        startDate: this.formatDateLocal(start),
-        startTime: `${this.pad(start.getHours())}:${this.pad(start.getMinutes())}`,
-        endDate: this.formatDateLocal(end),
-        endTime: `${this.pad(end.getHours())}:${this.pad(end.getMinutes())}`
+      this.addForm = this.getFormState(start, end);
+      this.addDialog = true;
+    },
+
+    openEditDialog(eventInfo) {
+      const start = eventInfo?.start instanceof Date
+        ? eventInfo.start
+        : this.parseDateTimeInput(eventInfo?.start || "", "00:00:00");
+      const end = eventInfo?.end instanceof Date
+        ? eventInfo.end
+        : this.parseDateTimeInput(eventInfo?.end || "", "23:59:59");
+
+      if (!eventInfo?.id || !start || !end) {
+        this.showSnackbar("Could not load this unavailability block.", "error");
+        return;
+      }
+
+      this.editingBlockId = eventInfo.id;
+      this.pendingSelection = {
+        start: this.toLocalDateTime(start),
+        end: this.toLocalDateTime(end)
       };
+      this.addForm = this.getFormState(start, end);
       this.addDialog = true;
     },
 
     closeAddDialog() {
       this.addDialog = false;
+      this.editingBlockId = null;
       this.pendingSelection = { start: "", end: "" };
     },
 
@@ -529,6 +476,20 @@ export default {
       return apiClient.post("/unavailable", payload);
     },
 
+    async updateUnavailabilitySlot(id, slot, reason) {
+      const payload = {
+        userID: this.user.userID,
+        start_date: this.formatDateLocal(slot.start),
+        end_date: this.formatDateLocal(slot.end),
+        start_time: this.formatTimeLocal(slot.start),
+        end_time: this.formatTimeLocal(slot.end),
+        reason,
+        isRecurring: false
+      };
+
+      return apiClient.put(`/unavailable/${id}`, payload);
+    },
+
     async saveUnavailability() {
       const slots = this.buildSlotsFromSelection();
       if (!slots.length) {
@@ -538,13 +499,21 @@ export default {
 
       this.isSavingUnavailability = true;
 
-      const reason = (this.addForm.reason || "").trim() || "Manual Block";
+      const reason = "Unavailable";
       const isRecurring = this.addForm.repeatType !== "none";
       let createdCount = 0;
       let failedCount = 0;
       let lastErrorMessage = "";
 
       try {
+        if (this.editingBlockId) {
+          await this.updateUnavailabilitySlot(this.editingBlockId, slots[0], reason);
+          await this.fetchSavedBlocks();
+          this.showSnackbar("Unavailability updated.");
+          this.closeAddDialog();
+          return;
+        }
+
         for (const slot of slots) {
           try {
             await this.createUnavailabilitySlot(slot, reason, isRecurring);
@@ -594,6 +563,23 @@ export default {
       this.deleteDialog = true;
     },
 
+    openDeleteDialogFromEdit() {
+      const start = this.toDateFromForm(this.addForm.startDate, this.addForm.startTime, false);
+      const end = this.toDateFromForm(this.addForm.endDate, this.addForm.endTime, true);
+
+      if (!this.editingBlockId || !start || !end) {
+        this.showSnackbar("Could not determine which block to delete.", "error");
+        return;
+      }
+
+      this.addDialog = false;
+      this.openDeleteDialog({
+        id: this.editingBlockId,
+        start,
+        end
+      });
+    },
+
     closeDeleteDialog() {
       this.deleteDialog = false;
       this.pendingDeleteEvent = null;
@@ -614,136 +600,13 @@ export default {
           (block) => String(block.id) !== String(id)
         );
         this.showSnackbar("Unavailability deleted.");
+        this.editingBlockId = null;
         this.closeDeleteDialog();
       } catch (error) {
         console.error("Error deleting unavailability:", error);
         this.showSnackbar("Could not delete unavailability.", "error");
       } finally {
         this.isDeletingUnavailability = false;
-      }
-    },
-
-    openGoogleSettingsDialog() {
-      this.googleSettingsDialog = true;
-      if (this.user?.userID) {
-        this.fetchGoogleConnectionStatus();
-      }
-    },
-
-    normalizeIcalUrl(rawUrl) {
-      const trimmed = (rawUrl || "").trim();
-      if (!trimmed) return "";
-      if (trimmed.startsWith("webcal://")) {
-        return `https://${trimmed.slice("webcal://".length)}`;
-      }
-      return trimmed;
-    },
-
-    async fetchGoogleConnectionStatus() {
-      try {
-        const response = await apiClient.get("/calendar/status", {
-          params: { userID: this.user.userID }
-        });
-
-        this.googleConnected = Boolean(response?.connected);
-        this.googleIcalUrl = response?.icalUrl || this.googleIcalUrl || "";
-        this.savedGoogleIcalUrl = response?.icalUrl || "";
-      } catch (error) {
-        console.error("Error loading Google Calendar status:", error);
-      }
-    },
-
-    async connectGoogleCalendar() {
-      this.isConnectingGoogle = true;
-      this.googleStatusMessage = "";
-
-      try {
-        const icalUrl = this.normalizeIcalUrl(this.googleIcalUrl);
-        if (!icalUrl) {
-          this.googleStatusType = "warning";
-          this.googleStatusMessage = "Paste your private iCal URL first.";
-          return;
-        }
-
-        const response = await apiClient.post("/calendar/connect", {
-          userID: this.user.userID,
-          icalUrl
-        });
-
-        this.googleConnected = Boolean(response?.connected ?? true);
-        this.googleIcalUrl = response?.icalUrl || icalUrl;
-        this.savedGoogleIcalUrl = this.googleIcalUrl;
-        this.googleStatusType = "success";
-        this.googleStatusMessage = "Google Calendar linked successfully.";
-      } catch (error) {
-        console.error("Error connecting Google Calendar:", error);
-        this.googleStatusType = "error";
-        this.googleStatusMessage =
-          error?.response?.data?.message || "Could not connect Google Calendar. Please try again.";
-      } finally {
-        this.isConnectingGoogle = false;
-      }
-    },
-
-    async syncGoogleCalendar() {
-      this.isSyncingGoogle = true;
-      this.googleStatusMessage = "";
-
-      try {
-        const icalUrl = this.normalizeIcalUrl(this.googleIcalUrl);
-        if (!icalUrl) {
-          this.googleStatusType = "warning";
-          this.googleStatusMessage = "Paste your private iCal URL first.";
-          return;
-        }
-
-        if (!this.googleConnected || this.savedGoogleIcalUrl !== icalUrl) {
-          await apiClient.post("/calendar/connect", {
-            userID: this.user.userID,
-            icalUrl
-          });
-          this.savedGoogleIcalUrl = icalUrl;
-          this.googleConnected = true;
-        }
-
-        const response = await apiClient.post("/calendar/sync", {
-          userID: this.user.userID,
-          icalUrl,
-          skipAllDay: false,
-          minDurationMinutes: 0,
-          defaultNoPeriodDurationMinutes: 30,
-          defaultAllDayDurationMinutes: 1440
-        });
-
-        const imported = response?.imported ?? 0;
-        const stats = response?.stats || {};
-        const assumedNoPeriod = stats?.assumedNoPeriod ?? 0;
-        const defaultNoPeriodDurationMinutes = stats?.defaultNoPeriodDurationMinutes ?? 30;
-        const defaultAllDayDurationMinutes = stats?.defaultAllDayDurationMinutes ?? 1440;
-
-        this.googleIcalUrl = icalUrl;
-        this.savedGoogleIcalUrl = icalUrl;
-        this.googleConnected = true;
-        await this.fetchSavedBlocks();
-
-        if (imported > 0) {
-          this.googleStatusType = "success";
-          const assumedPart =
-            assumedNoPeriod > 0
-              ? ` (${assumedNoPeriod} no-end events imported as ${defaultNoPeriodDurationMinutes}m or ${defaultAllDayDurationMinutes}m blocks)`
-              : "";
-          this.googleStatusMessage = `Google Calendar import complete: ${imported} event(s) imported${assumedPart}.`;
-        } else {
-          this.googleStatusType = "info";
-          this.googleStatusMessage = "Import completed, but no events were returned from this feed.";
-        }
-      } catch (error) {
-        console.error("Error syncing Google Calendar:", error);
-        this.googleStatusType = "error";
-        this.googleStatusMessage =
-          error?.response?.data?.message || "Could not import Google Calendar events.";
-      } finally {
-        this.isSyncingGoogle = false;
       }
     }
   }
