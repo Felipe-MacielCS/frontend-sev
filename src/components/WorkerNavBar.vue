@@ -47,6 +47,54 @@
         rounded="xl"
         class="mx-2 my-1"
       />
+
+      <v-list-group value="clock-in-out">
+        <template #activator="{ props }">
+          <v-list-item
+            v-bind="props"
+            title="Clock In / Out"
+            prepend-icon="mdi-timer-outline"
+            rounded="xl"
+            class="mx-2 my-1"
+          />
+        </template>
+
+        <div class="px-4 pb-3">
+          <div v-if="quickClockContext" class="text-body-2 mb-3">
+            <div><b>Date:</b> {{ quickClockContext.shift.shift_date }}</div>
+            <div>
+              <b>Shift:</b>
+              {{ toHHMM(quickClockContext.shift.start_time) }} -
+              {{ toHHMM(quickClockContext.shift.end_time) }}
+            </div>
+          </div>
+          <div v-else class="text-body-2 text-medium-emphasis mb-3">
+            No official shift is available right now.
+          </div>
+
+          <v-btn
+            color="primary"
+            block
+            size="small"
+            class="mb-2"
+            :disabled="!quickClockContext"
+            :loading="quickClockLoading"
+            @click="handleQuickClockAction"
+          >
+            {{ quickClockOpenRecord ? "Clock Out" : "Clock In" }}
+          </v-btn>
+
+          <v-btn
+            to="/worker/clock"
+            variant="tonal"
+            color="primary"
+            block
+            size="small"
+          >
+            Open Time Log
+          </v-btn>
+        </div>
+      </v-list-group>
     </v-list>
 
     <template v-if="isWorkerDashboard">
@@ -104,17 +152,153 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import userShiftServices from "../services/userShiftServices.js";
+import shiftServices from "../services/shiftServices.js";
+import scheduleServices from "../services/scheduleServices.js";
+import clockInOutServices from "../services/clockInOutServices.js";
 
 const DRAWER_STORAGE_KEY = "worker_nav_drawer_open";
 const FILTER_STORAGE_KEY = "worker_dashboard_filters";
+
 const drawer = ref(true);
 const route = useRoute();
 const isWorkerDashboard = computed(() => route.path === "/worker");
+const quickClockLoading = ref(false);
+const quickClockContext = ref(null);
 const filters = ref({
   position: "Positions",
   status: ["all"],
   worker: "Workers",
 });
+
+const normalizeID = (raw) => {
+  const id = Number(raw);
+  return Number.isFinite(id) && id > 0 ? id : null;
+};
+
+const getCurrentUser = () => {
+  const raw = localStorage.getItem("user");
+  const stored = raw ? JSON.parse(raw) : null;
+  return stored?.user ?? stored ?? null;
+};
+
+const getCurrentUserID = () => {
+  const user = getCurrentUser();
+  return normalizeID(user?.ID ?? user?.id ?? user?.userID);
+};
+
+const isOfficialSchedule = (schedule) => {
+  const type = String(schedule?.type || "").trim().toLowerCase();
+  const status = String(schedule?.status || "").trim().toLowerCase();
+  return type === "official" || status === "published";
+};
+
+const toHHMM = (value) => {
+  if (!value) return "00:00";
+  return String(value).slice(0, 5);
+};
+
+const getShiftDateTime = (shift, key) => new Date(`${shift.shift_date}T${toHHMM(shift[key])}:00`);
+
+const pickPrimaryClockContext = (contexts) => {
+  if (!contexts.length) return null;
+
+  const openContext = contexts.find((context) =>
+    context.clockRecords.some((record) => !record.clock_out_time)
+  );
+  if (openContext) return openContext;
+
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const todayContexts = contexts.filter((context) => context.shift.shift_date === today);
+
+  const activeToday = todayContexts.find((context) => {
+    const start = getShiftDateTime(context.shift, "start_time");
+    const end = getShiftDateTime(context.shift, "end_time");
+    return start <= now && now <= end;
+  });
+  if (activeToday) return activeToday;
+
+  const upcomingToday = todayContexts.find(
+    (context) => getShiftDateTime(context.shift, "start_time") >= now
+  );
+  if (upcomingToday) return upcomingToday;
+
+  if (todayContexts.length) return todayContexts[0];
+  return contexts[0];
+};
+
+const loadQuickClockData = async () => {
+  try {
+    const userID = getCurrentUserID();
+    if (!userID) {
+      quickClockContext.value = null;
+      return;
+    }
+
+    const assignmentsRes = await userShiftServices.getAll({ userID });
+    const assignments = Array.isArray(assignmentsRes) ? assignmentsRes : [];
+    const shiftIDs = [...new Set(
+      assignments.map((assignment) => normalizeID(assignment?.shiftID)).filter(Boolean)
+    )];
+    const shifts = await Promise.all(shiftIDs.map((shiftID) => shiftServices.get(shiftID)));
+    const shiftsByID = Object.fromEntries(
+      shifts.filter(Boolean).map((shift) => [normalizeID(shift?.ID), shift])
+    );
+
+    const scheduleIDs = [...new Set(
+      shifts.map((shift) => normalizeID(shift?.scheduleID)).filter(Boolean)
+    )];
+    const schedules = await Promise.all(scheduleIDs.map((scheduleID) => scheduleServices.get(scheduleID)));
+    const schedulesByID = Object.fromEntries(
+      schedules.filter(Boolean).map((schedule) => [normalizeID(schedule?.ID), schedule])
+    );
+
+    const contexts = await Promise.all(
+      assignments.map(async (assignment) => {
+        const userShiftID = normalizeID(assignment?.ID);
+        const shift = shiftsByID[normalizeID(assignment?.shiftID)];
+        const schedule = schedulesByID[normalizeID(shift?.scheduleID)];
+        if (!userShiftID || !shift || !schedule || !isOfficialSchedule(schedule)) return null;
+
+        const clockRes = await clockInOutServices.getByUserShift(userShiftID);
+        const clockRecords = Array.isArray(clockRes) ? clockRes : [];
+        return { userShiftID, shift, schedule, clockRecords };
+      })
+    );
+
+    const normalizedContexts = contexts
+      .filter(Boolean)
+      .sort((a, b) => getShiftDateTime(b.shift, "start_time") - getShiftDateTime(a.shift, "start_time"));
+
+    quickClockContext.value = pickPrimaryClockContext(normalizedContexts);
+  } catch (error) {
+    console.error("Failed to load quick clock data:", error?.response?.data || error);
+    quickClockContext.value = null;
+  }
+};
+
+const quickClockOpenRecord = computed(
+  () => quickClockContext.value?.clockRecords?.find((record) => !record.clock_out_time) || null
+);
+
+const handleQuickClockAction = async () => {
+  if (!quickClockContext.value?.userShiftID) return;
+
+  try {
+    quickClockLoading.value = true;
+    if (quickClockOpenRecord.value) {
+      await clockInOutServices.clockOut(quickClockContext.value.userShiftID);
+    } else {
+      await clockInOutServices.clockIn(quickClockContext.value.userShiftID);
+    }
+    await loadQuickClockData();
+  } catch (error) {
+    console.error("Quick clock action failed:", error?.response?.data || error);
+  } finally {
+    quickClockLoading.value = false;
+  }
+};
 
 onMounted(() => {
   const savedDrawerState = localStorage.getItem(DRAWER_STORAGE_KEY);
@@ -135,6 +319,8 @@ onMounted(() => {
       console.error("Could not parse worker filters:", error);
     }
   }
+
+  loadQuickClockData();
 });
 
 watch(drawer, (isOpen) => {
@@ -149,8 +335,16 @@ watch(
   { deep: true }
 );
 
+watch(
+  () => route.path,
+  () => {
+    loadQuickClockData();
+  }
+);
+
 const navItems = [
   { title: "Schedule", to: "/worker", icon: "mdi-calendar-month-outline" },
+  { title: "Clock In / Out", to: "/worker/clock", icon: "mdi-timer-outline" },
   { title: "Trade Board", to: "/manager/users", icon: "mdi-swap-horizontal" },
   { title: "Announcements", to: "/manager/budget", icon: "mdi-bullhorn-outline" },
   { title: "Availability", to: "/worker/availability", icon: "mdi-calendar-clock-outline" },
