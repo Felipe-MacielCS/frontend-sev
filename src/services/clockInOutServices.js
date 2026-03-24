@@ -1,19 +1,13 @@
 import apiClient from "./services.js";
 
 export default {
-  getAll(params) {
-    return apiClient.get("/clockinout", { params });
+  clockIn(userShiftID) {
+    return apiClient.post(`/clockinout/user-shifts/${userShiftID}/clock-in`);
   },
-  get(id) {
-    return apiClient.get(`/clockinout/${id}`);
+  clockOut(userShiftID) {
+    return apiClient.post(`/clockinout/user-shifts/${userShiftID}/clock-out`);
   },
-  create(data) {
-    return apiClient.post("/clockinout", data);
-  },
-  update(id, data) {
-    return apiClient.put(`/clockinout/${id}`, data);
-  },
-  delete(id) {
-    return apiClient.delete(`/clockinout/${id}`);
+  getByUserShift(userShiftID) {
+    return apiClient.get(`/clockinout/user-shifts/${userShiftID}`);
   },
 };

@@ -4,6 +4,7 @@ import Login from "./views/Login.vue";
 import Signup from "./views/Signup.vue"; 
 
 import WorkerDashboard from "./views/WorkerDashBoard.vue"; 
+import WorkerClockInOut from "./views/WorkerClockInOut.vue";
 import ManagerDashboard from "./views/ManagerDashBoard.vue";
 import ManagerTemplates from "./views/ManagerTemplates.vue";
 import AvailabilityWorker from "./views/AvailabilityWorker.vue";
@@ -60,6 +61,12 @@ const router = createRouter({
       path: "/worker/availability",
       name: "workerAvailability",
       component: AvailabilityWorker,
+      meta: { role: "Worker" },
+    },
+    {
+      path: "/worker/clock",
+      name: "workerClockInOut",
+      component: WorkerClockInOut,
       meta: { role: "Worker" },
     },
 
