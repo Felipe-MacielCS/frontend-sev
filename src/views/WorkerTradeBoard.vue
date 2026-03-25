@@ -13,7 +13,6 @@
           </v-card-title>
 
           <v-card-text>
-
             <v-alert
               v-if="!loading && !myAssignedShifts.length"
               type="info"
@@ -22,6 +21,17 @@
             >
               You do not have any assigned shifts available to post right now.
             </v-alert>
+
+            <div class="text-subtitle-2 font-weight-medium mb-2">Choose a Date</div>
+            <v-text-field
+              v-model="selectedTradeDate"
+              type="date"
+              label="Trade Date"
+              variant="outlined"
+              density="comfortable"
+              :disabled="loading || !availableTradeDates.length"
+              class="mb-4"
+            />
 
             <v-select
               v-model="newRequest.shiftKey"
@@ -39,7 +49,6 @@
             <v-textarea
               v-model="newRequest.reason"
               label="Reason"
-              placeholder="Example: I have class during this shift."
               variant="outlined"
               density="comfortable"
               rows="4"
@@ -243,6 +252,7 @@ export default {
       tradePosts: [],
       activeFilter: "open",
       search: "",
+      selectedTradeDate: null,
       newRequest: {
         shiftKey: null,
         reason: "",
@@ -287,13 +297,21 @@ export default {
         .sort((a, b) => a.startsAt - b.startsAt);
     },
     myAssignedShiftOptions() {
-      return this.myAssignedShifts.map((shift) => ({
+      return this.filteredAssignedShifts.map((shift) => ({
         value: shift.key,
         label: `${this.formatShiftDate(shift.shiftDate)} | ${this.formatTimeRange(shift.startTime, shift.endTime)} | ${shift.positionTitle}`,
       }));
     },
+    availableTradeDates() {
+      return [...new Set(this.myAssignedShifts.map((shift) => shift.shiftDate))].sort();
+    },
+    filteredAssignedShifts() {
+      const selectedDate = this.normalizeDateValue(this.selectedTradeDate);
+      if (!selectedDate) return [];
+      return this.myAssignedShifts.filter((shift) => shift.shiftDate === selectedDate);
+    },
     selectedShiftToTrade() {
-      return this.myAssignedShifts.find((shift) => shift.key === this.newRequest.shiftKey) || null;
+      return this.filteredAssignedShifts.find((shift) => shift.key === this.newRequest.shiftKey) || null;
     },
     filteredTradePosts() {
       const term = String(this.search || "").trim().toLowerCase();
@@ -386,6 +404,25 @@ export default {
     );
     await this.loadTradeBoardData();
   },
+  watch: {
+    myAssignedShifts: {
+      immediate: true,
+      handler(shifts) {
+        this.syncSelectedTradeDate(shifts);
+      },
+    },
+    selectedTradeDate() {
+      const normalizedDate = this.normalizeDateValue(this.selectedTradeDate);
+      if (normalizedDate !== this.selectedTradeDate) {
+        this.selectedTradeDate = normalizedDate;
+        return;
+      }
+
+      if (!this.filteredAssignedShifts.some((shift) => shift.key === this.newRequest.shiftKey)) {
+        this.newRequest.shiftKey = null;
+      }
+    },
+  },
   methods: {
     showSnackbar(message, color = "success") {
       this.snackbar.message = message;
@@ -399,6 +436,37 @@ export default {
     normalizeUserID(raw) {
       const id = Number(raw);
       return Number.isFinite(id) && id > 0 ? id : null;
+    },
+    normalizeDateValue(value) {
+      if (!value) return null;
+      if (value instanceof Date) {
+        return Number.isNaN(value.getTime()) ? null : value.toISOString().slice(0, 10);
+      }
+      const normalized = String(value).slice(0, 10);
+      return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : null;
+    },
+    isTradeDateSelectable(value) {
+      return this.availableTradeDates.includes(this.normalizeDateValue(value));
+    },
+    syncSelectedTradeDate(shifts = this.myAssignedShifts) {
+      const availableDates = [...new Set((shifts || []).map((shift) => shift.shiftDate))].sort();
+
+      if (!availableDates.length) {
+        this.selectedTradeDate = null;
+        this.newRequest.shiftKey = null;
+        return;
+      }
+
+      const selectedDate = this.normalizeDateValue(this.selectedTradeDate);
+
+      if (!selectedDate || !availableDates.includes(selectedDate)) {
+        this.selectedTradeDate = availableDates[0];
+        return;
+      }
+
+      if (!shifts.some((shift) => shift.key === this.newRequest.shiftKey && shift.shiftDate === selectedDate)) {
+        this.newRequest.shiftKey = null;
+      }
     },
     toHHMM(value) {
       if (!value) return "00:00";

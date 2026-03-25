@@ -9,6 +9,7 @@ import ManagerDashboard from "./views/ManagerDashBoard.vue";
 import ManagerTemplates from "./views/ManagerTemplates.vue";
 import AvailabilityWorker from "./views/AvailabilityWorker.vue";
 import ManagerUsers from "./views/ManagerUsers.vue";
+import ManagerTradeBoard from "./views/ManagerTradeBoard.vue";
 import WorkerTradeBoard from "./views/WorkerTradeBoard.vue";
 // import AdminDashboard from "./views/AdminDashBoard.vue";
 
@@ -46,6 +47,12 @@ const router = createRouter({
       path: "/manager/users",
       name: "managerUsers",
       component: ManagerUsers,
+      meta: { role: "Manager" },
+    },
+    {
+      path: "/manager/tradeboard",
+      name: "managerTradeBoard",
+      component: ManagerTradeBoard,
       meta: { role: "Manager" },
     },
 
