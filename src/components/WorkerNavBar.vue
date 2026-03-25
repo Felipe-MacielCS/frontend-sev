@@ -97,55 +97,6 @@
       </v-list-group>
     </v-list>
 
-    <template v-if="isWorkerDashboard">
-      <v-divider class="my-2" />
-      <div class="px-4 pt-2 pb-1 text-overline filter-title">Schedule Filters</div>
-
-      <div class="px-3 pb-4">
-        <v-select
-          v-model="filters.position"
-          :items="['Positions', 'Lifeguard', 'Desk']"
-          variant="outlined"
-          density="compact"
-          hide-details
-          class="mb-3"
-        />
-
-        <div class="text-caption font-weight-medium mb-1">Status</div>
-        <v-checkbox
-          v-model="filters.status"
-          label="All"
-          value="all"
-          density="compact"
-          hide-details
-          class="mb-n2"
-        />
-        <v-checkbox
-          v-model="filters.status"
-          label="Assigned"
-          value="assigned"
-          density="compact"
-          hide-details
-          class="mb-n2"
-        />
-        <v-checkbox
-          v-model="filters.status"
-          label="Open"
-          value="open"
-          density="compact"
-          hide-details
-          class="mb-3"
-        />
-
-        <v-select
-          v-model="filters.worker"
-          :items="['Workers', 'Felipe', 'John']"
-          variant="outlined"
-          density="compact"
-          hide-details
-        />
-      </div>
-    </template>
   </v-navigation-drawer>
 </template>
 
