@@ -66,4 +66,29 @@ export default {
 .fc {
   font-family: "Roboto", sans-serif;
 }
+
+:deep(.fc-theme-standard .fc-scrollgrid),
+:deep(.fc-theme-standard td),
+:deep(.fc-theme-standard th) {
+  border-color: rgba(var(--v-theme-on-surface), 0.16);
+}
+
+:deep(.fc .fc-timegrid-slot),
+:deep(.fc .fc-timegrid-axis),
+:deep(.fc .fc-col-header-cell),
+:deep(.fc .fc-timegrid-divider),
+:deep(.fc .fc-daygrid-day-frame) {
+  background-color: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+}
+
+:deep(.fc .fc-timegrid-axis-cushion),
+:deep(.fc .fc-col-header-cell-cushion),
+:deep(.fc .fc-toolbar-title) {
+  color: rgb(var(--v-theme-on-surface));
+}
+
+:deep(.fc .fc-day-today) {
+  background: rgba(var(--v-theme-primary), 0.12) !important;
+}
 </style>

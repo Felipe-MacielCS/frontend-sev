@@ -69,7 +69,6 @@ watch(drawer, (isOpen) => {
 });
 
 const navItems = [
-  { title: "Settings", to: "/manager/settings", icon: "mdi-cog-outline" },
   { title: "Templates", to: "/manager/templates", icon: "mdi-file-document-outline" },
   { title: "Schedule", to: "/manager", icon: "mdi-calendar-month-outline" },
   { title: "Users", to: "/manager/users", icon: "mdi-account-group-outline" },
@@ -77,6 +76,7 @@ const navItems = [
   { title: "Trade Board", to: "/manager/tradeboard", icon: "mdi-swap-horizontal" },
   { title: "Announcements", to: "/manager/announcements", icon: "mdi-bullhorn-outline" },
   { title: "Availability", to: "/manager/availability", icon: "mdi-calendar-clock-outline" },
+  { title: "Settings", to: "/manager/settings", icon: "mdi-cog-outline" },
 ];
 </script>
 

@@ -453,7 +453,8 @@ export default {
   flex: 0 0 auto;
   position: relative;
   z-index: 2;
-  background: #fff;
+  background: rgb(var(--v-theme-surface));
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
 }
 
 .manager-user-dialog-body {
