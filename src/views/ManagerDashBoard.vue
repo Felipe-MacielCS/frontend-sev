@@ -415,6 +415,8 @@ import userShiftServices from "../services/userShiftServices.js";
 import departmentUsersServices from "../services/departmentUsersServices.js";
 import userServices from "../services/userServices.js";
 import positionServices from "../services/positionServices.js";
+import settingsServices from "../services/settingsServices.js";
+import settingsValuesServices from "../services/settingsValuesServices.js";
 
 const SESSION_STORAGE_KEY = "manager-schedule-page-state-v1";
 
@@ -470,6 +472,12 @@ export default {
       userShiftAssignmentsByShiftID: {},
       workersByID: {},
       positionsByID: {},
+      managerSettings: {
+        schedule_week_starts_monday: false,
+        default_shift_workers_required: 1,
+        allow_shift_overlap: false,
+        allowed_shift_overlap_minutes: 0,
+      },
 
       shiftDialog: {
         open: false,
@@ -722,7 +730,7 @@ export default {
     },
 
     addDays(date, days) {
-      const next = new Date(date);
+        const next = new Date(date);
       next.setDate(next.getDate() + days);
       return next;
     },
@@ -730,8 +738,11 @@ export default {
     getStartOfWeek(date) {
       const start = new Date(date);
       start.setHours(0, 0, 0, 0);
-      const day = start.getDay(); // 0 = Sunday
-      start.setDate(start.getDate() - day);
+      const day = start.getDay();
+      const offset = this.managerSettings.schedule_week_starts_monday
+        ? (day === 0 ? 6 : day - 1)
+        : day;
+      start.setDate(start.getDate() - offset);
       return start;
     },
 
@@ -762,6 +773,71 @@ export default {
 
     showMessage(message, color = "success") {
       this.snackbar = { show: true, message, color };
+    },
+
+    castManagerSettingValue(valueType, rawValue) {
+      if (valueType === "bool") {
+        return String(rawValue).trim().toLowerCase() === "true";
+      }
+      if (valueType === "int") {
+        const parsed = Number(rawValue);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+      return rawValue;
+    },
+
+    async loadManagerSettings() {
+      const desiredKeys = [
+        "schedule_week_starts_monday",
+        "default_shift_workers_required",
+        "allow_shift_overlap",
+        "allowed_shift_overlap_minutes",
+      ];
+
+      const definitions = await settingsServices.getAll();
+      const settingsByKey = Object.fromEntries(
+        (Array.isArray(definitions) ? definitions : []).map((row) => [row.key, row])
+      );
+      const values = await settingsValuesServices.getAll({
+        departmentID: this.managerDepartmentID,
+      });
+      const valuesBySettingID = Object.fromEntries(
+        (Array.isArray(values) ? values : []).map((row) => [row.settingID, row])
+      );
+
+      for (const key of desiredKeys) {
+        const definition = settingsByKey[key];
+        if (!definition?.ID) continue;
+        const rawValue = valuesBySettingID[definition.ID]?.value ?? definition.default_value;
+        this.managerSettings[key] = this.castManagerSettingValue(definition.value_type, rawValue);
+      }
+    },
+
+    getShiftOverlapMinutes(candidateShift, existingShift) {
+      if (candidateShift.shift_date !== existingShift.shift_date) return 0;
+
+      const candidateStart = new Date(`${candidateShift.shift_date}T${this.toHHMM(candidateShift.start_time)}:00`);
+      const candidateEnd = new Date(`${candidateShift.shift_date}T${this.toHHMM(candidateShift.end_time)}:00`);
+      const existingStart = new Date(`${existingShift.shift_date}T${this.toHHMM(existingShift.start_time)}:00`);
+      const existingEnd = new Date(`${existingShift.shift_date}T${this.toHHMM(existingShift.end_time)}:00`);
+
+      const overlapMs = Math.min(candidateEnd.getTime(), existingEnd.getTime()) - Math.max(candidateStart.getTime(), existingStart.getTime());
+      return overlapMs > 0 ? Math.round(overlapMs / 60000) : 0;
+    },
+
+    validateShiftOverlap(shiftPayload, editingShiftID = null) {
+      const allowedMinutes = this.managerSettings.allow_shift_overlap
+        ? Number(this.managerSettings.allowed_shift_overlap_minutes) || 0
+        : 0;
+
+      const conflictingShift = this.shifts.find((shift) => {
+        if (editingShiftID && Number(shift.ID) === Number(editingShiftID)) return false;
+        return this.getShiftOverlapMinutes(shiftPayload, shift) > allowedMinutes;
+      });
+
+      if (!conflictingShift) return null;
+
+      return `This shift overlaps another shift by more than ${allowedMinutes} minute${allowedMinutes === 1 ? "" : "s"}.`;
     },
 
     readSessionState() {
@@ -1018,7 +1094,7 @@ export default {
         }
 
         const restoredState = this.restoreSessionState();
-        await Promise.all([this.loadWorkers(), this.loadPositions(), this.loadSchedules()]);
+        await Promise.all([this.loadWorkers(), this.loadPositions(), this.loadManagerSettings(), this.loadSchedules()]);
 
         const routeScheduleID = Number(this.$route?.query?.scheduleID);
         const routeTemplateID = Number(this.$route?.query?.templateID);
@@ -1270,7 +1346,7 @@ export default {
         shift_date: start.toISOString().slice(0, 10),
         start_time: start.toTimeString().slice(0, 5),
         end_time: end.toTimeString().slice(0, 5),
-        workers_required: 1,
+        workers_required: Number(this.managerSettings.default_shift_workers_required) || 1,
         positionID: this.positionItems[0]?.value ?? null,
         assignedWorkerIDs: [],
       };
@@ -1318,6 +1394,12 @@ export default {
           scheduleID: this.selectedScheduleID,
           positionID: form.positionID || null,
         };
+
+        const overlapError = this.validateShiftOverlap(shiftPayload, shiftID);
+        if (overlapError) {
+          this.showMessage(overlapError, "warning");
+          return;
+        }
 
         if (this.shiftDialog.mode === "create") {
           const createdShift = await shiftServices.create(shiftPayload);

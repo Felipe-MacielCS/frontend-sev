@@ -20,7 +20,7 @@
 
     <v-spacer></v-spacer>
 
-    <v-btn icon="mdi-cog" variant="text" class="mr-1"></v-btn>
+    <v-btn icon="mdi-cog" variant="text" class="mr-1" to="/worker/settings"></v-btn>
   </v-app-bar>
 
   <v-navigation-drawer
@@ -343,6 +343,7 @@ watch(
 );
 
 const navItems = [
+  { title: "Settings", to: "/worker/settings", icon: "mdi-cog-outline" },
   { title: "Schedule", to: "/worker", icon: "mdi-calendar-month-outline" },
   { title: "Clock In / Out", to: "/worker/clock", icon: "mdi-timer-outline" },
   { title: "Trade Board", to: "/manager/users", icon: "mdi-swap-horizontal" },
