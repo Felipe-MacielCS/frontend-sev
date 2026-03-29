@@ -1,9 +1,9 @@
 import { createRouter, createWebHistory } from "vue-router";
 
 import Login from "./views/Login.vue";
-import Signup from "./views/Signup.vue"; 
+import Signup from "./views/Signup.vue";
 
-import WorkerDashboard from "./views/WorkerDashBoard.vue"; 
+import WorkerDashboard from "./views/WorkerDashBoard.vue";
 import WorkerClockInOut from "./views/WorkerClockInOut.vue";
 import WorkerSettings from "./views/WorkerSettings.vue";
 import ManagerDashboard from "./views/ManagerDashBoard.vue";
@@ -11,9 +11,11 @@ import ManagerSettings from "./views/ManagerSettings.vue";
 import ManagerTemplates from "./views/ManagerTemplates.vue";
 import AvailabilityWorker from "./views/AvailabilityWorker.vue";
 import ManagerUsers from "./views/ManagerUsers.vue";
-//import AdminDashboard from "./views/AdminDashBoard.vue";
+import ManagerTradeBoard from "./views/ManagerTradeBoard.vue";
+import WorkerTradeBoard from "./views/WorkerTradeBoard.vue";
+// import AdminDashboard from "./views/AdminDashBoard.vue";
 
-//import WorkerProfile from "./views/WorkerProfile.vue";
+// import WorkerProfile from "./views/WorkerProfile.vue";
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -43,7 +45,6 @@ const router = createRouter({
       component: ManagerTemplates,
       meta: { role: "Manager" },
     },
-    
     {
       path: "/manager/users",
       name: "managerUsers",
@@ -56,6 +57,12 @@ const router = createRouter({
       component: ManagerSettings,
       meta: { role: "Manager" },
     },
+    {
+      path: "/manager/tradeboard",
+      name: "managerTradeBoard",
+      component: ManagerTradeBoard,
+      meta: { role: "Manager" },
+    },
 
     // Worker Routes
     {
@@ -64,11 +71,16 @@ const router = createRouter({
       component: WorkerDashboard,
       meta: { role: "Worker" },
     },
-
     {
       path: "/worker/availability",
       name: "workerAvailability",
       component: AvailabilityWorker,
+      meta: { role: "Worker" },
+    },
+    {
+      path: "/worker/tradeboard",
+      name: "workerTradeBoard",
+      component: WorkerTradeBoard,
       meta: { role: "Worker" },
     },
     {
