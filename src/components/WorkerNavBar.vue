@@ -325,6 +325,11 @@ onMounted(() => {
 
 watch(drawer, (isOpen) => {
   localStorage.setItem(DRAWER_STORAGE_KEY, isOpen ? "1" : "0");
+  window.dispatchEvent(
+    new CustomEvent("app-drawer-toggled", {
+      detail: { scope: "worker", open: isOpen },
+    })
+  );
 });
 
 watch(
