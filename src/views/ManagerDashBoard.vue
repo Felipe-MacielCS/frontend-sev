@@ -344,6 +344,7 @@
             :isSelectable="true"
             :height="760"
             :contentHeight="700"
+            :firstDay="managerSettings.schedule_week_starts_monday ? 1 : 0"
             @dates-changed="saveSessionState"
             @time-selected="openCreateShiftModal"
             @shift-clicked="openEditShiftModal"
