@@ -49,6 +49,12 @@ export default {
     };
   },
   methods: {
+    handleDrawerToggle() {
+      this.$nextTick(() => {
+        setTimeout(() => this.updateSize(), 50);
+        setTimeout(() => this.updateSize(), 220);
+      });
+    },
     updateSize() {
       const api = this.$refs.fc?.getApi();
       if (api) api.updateSize();
@@ -65,6 +71,12 @@ export default {
         ? current.toISOString().slice(0, 10)
         : null;
     },
+  },
+  mounted() {
+    window.addEventListener("app-drawer-toggled", this.handleDrawerToggle);
+  },
+  beforeUnmount() {
+    window.removeEventListener("app-drawer-toggled", this.handleDrawerToggle);
   },
   watch: {
     events(newEvents) {
