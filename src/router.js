@@ -10,6 +10,7 @@ import ManagerTemplates from "./views/ManagerTemplates.vue";
 import AvailabilityWorker from "./views/AvailabilityWorker.vue";
 import ManagerUsers from "./views/ManagerUsers.vue";
 import WorkerTradeBoard from "./views/WorkerTradeBoard.vue";
+import Budget from "./views/Budget.vue";
 // import AdminDashboard from "./views/AdminDashBoard.vue";
 
 // import WorkerProfile from "./views/WorkerProfile.vue";
@@ -73,6 +74,12 @@ const router = createRouter({
       name: "workerClockInOut",
       component: WorkerClockInOut,
       meta: { role: "Worker" },
+    },
+    {
+      path: "/manager/budget",
+      name: "budget",
+      component: Budget,
+      meta: { role: "Manager" },
     },
 
     // --- 404 Catch-all ---
