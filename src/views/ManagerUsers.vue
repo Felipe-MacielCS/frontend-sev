@@ -1,8 +1,19 @@
 <template>
   <v-container fluid class="pa-6 bg-grey-lighten-4" style="min-height: 100vh;">
     <v-card class="pa-4" elevation="2">
-      <div class="d-flex align-center justify-space-between mb-4">
-        <h2 class="text-h6 font-weight-bold">Workers</h2>
+      <div class="d-flex justify-space-between align-start mb-4">
+        <div>
+          <h2 class="text-h6 font-weight-bold mb-3">Workers</h2>
+
+          <v-btn
+            color="#8b1e1e"
+            class="text-white"
+            elevation="0"
+            @click="openManagePositionsDialog()"
+          >
+            Manage Positions
+          </v-btn>
+        </div>
 
         <v-text-field
           v-model="search"
@@ -31,21 +42,42 @@
         <thead>
           <tr>
             <th>Name</th>
-            <th>Email</th>
-            <th>Phone</th>
+            <th>Positions</th>
             <th>Status</th>
-            <th></th>
+            <th>Actions</th>
           </tr>
         </thead>
 
         <tbody>
           <tr v-for="w in filteredWorkers" :key="w.ID">
             <td>{{ w.name }}</td>
-            <td>{{ w.email }}</td>
-            <td>{{ w.phone }}</td>
+            <td style="min-width: 260px;">
+              <div v-if="getWorkerPositionNames(w).length">
+                {{ getWorkerPositionNames(w).join(", ") }}
+              </div>
+              <div v-else class="text-medium-emphasis">
+                None assigned
+              </div>
+            </td>
             <td>{{ w.status }}</td>
             <td>
-              <v-btn size="small" variant="text" @click="viewUser(w)">View</v-btn>
+              <div class="d-flex align-center ga-2">
+                <v-btn
+                  size="small"
+                  variant="text"
+                  icon="mdi-pencil"
+                  @click="openEditUserDialog(w)"
+                />
+                <v-btn
+                  size="small"
+                  color="#8b1e1e"
+                  class="text-white"
+                  elevation="0"
+                  @click="viewUser(w)"
+                >
+                  View
+                </v-btn>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -79,18 +111,13 @@
                     <v-card class="pa-4" variant="tonal">
                       <div class="text-subtitle-2 font-weight-bold mb-2">User Details</div>
                       <div class="mb-2"><b>Name:</b> {{ viewDialog.user?.name }}</div>
+                      <div class="mb-2">
+                        <b>Positions:</b>
+                        {{ getWorkerPositionNames(viewDialog.user).length ? getWorkerPositionNames(viewDialog.user).join(", ") : "None assigned" }}
+                      </div>
                       <div class="mb-2"><b>Email:</b> {{ viewDialog.user?.email }}</div>
                       <div class="mb-2"><b>Phone:</b> {{ viewDialog.user?.phone || "N/A" }}</div>
                       <div class="mb-2"><b>Status:</b> {{ viewDialog.user?.status || "N/A" }}</div>
-                      <div class="mb-2"><b>Role:</b> {{ viewDialog.user?.role || "N/A" }}</div>
-                    </v-card>
-                  </v-col>
-
-                  <v-col cols="12" md="6">
-                    <v-card class="pa-4" variant="tonal">
-                      <div class="text-subtitle-2 font-weight-bold mb-2">Actions</div>
-                      <v-btn disabled variant="outlined" block class="mb-2">Edit (soon)</v-btn>
-                      <v-btn disabled variant="outlined" block>Deactivate (soon)</v-btn>
                     </v-card>
                   </v-col>
                 </v-row>
@@ -146,13 +173,284 @@
           </div>
         </v-card>
       </v-dialog>
+
+  <v-dialog v-model="editDialog.open" max-width="1000">
+    <v-card class="pa-4 d-flex flex-column" style="height: 85vh;">
+      <div class="d-flex align-center justify-space-between mb-2">
+        <h3 class="text-h6 font-weight-bold">
+          {{ editDialog.user?.name || "Worker" }}
+        </h3>
+        <v-btn icon="mdi-close" variant="text" @click="closeEditUserDialog" />
+      </div>
+
+      <v-tabs v-model="editDialog.tab" color="primary" class="manager-user-tabs">
+        <v-tab value="info">Info</v-tab>
+        <v-tab value="calendar">Calendar</v-tab>
+      </v-tabs>
+
+      <v-alert
+        v-if="editDialog.error"
+        type="error"
+        variant="tonal"
+        class="mt-3"
+      >
+        {{ editDialog.error }}
+      </v-alert>
+
+      <div class="flex-grow-1 pt-3 manager-user-dialog-body">
+        <v-window v-model="editDialog.tab" class="manager-user-window">
+          <v-window-item value="info">
+            <v-card class="pa-4 edit-user-details-card" variant="tonal">
+              <div class="text-subtitle-2 font-weight-bold mb-4">User Details</div>
+
+              <div class="mb-3"><b>Name:</b> {{ editDialog.user?.name }}</div>
+              <div class="mb-3"><b>Email:</b> {{ editDialog.user?.email }}</div>
+              <div class="mb-4"><b>Phone:</b> {{ editDialog.user?.phone || "N/A" }}</div>
+
+              <div class="d-flex align-center justify-space-between mb-4">
+                <div class="font-weight-medium">Status</div>
+                <v-radio-group
+                  v-model="editDialog.form.status"
+                  inline
+                  hide-details
+                  color="#8b1e1e"
+                >
+                  <v-radio label="Active" value="active" />
+                  <v-radio label="Deactive" value="inactive" />
+                </v-radio-group>
+              </div>
+
+              <div class="font-weight-medium mb-2">Positions</div>
+              <div class="edit-position-list">
+                <v-checkbox
+                  v-for="position in availablePositions"
+                  :key="getPositionId(position)"
+                  v-model="editDialog.form.positionIDs"
+                  :label="position.title || `Position ${getPositionId(position)}`"
+                  :value="getPositionId(position)"
+                  density="compact"
+                  hide-details
+                />
+              </div>
+            </v-card>
+          </v-window-item>
+
+          <v-window-item value="calendar">
+            <div class="d-flex align-center justify-space-between mb-2">
+              <div class="d-flex align-center ga-4">
+                <v-checkbox
+                  v-model="calendarFilters.showUnavailability"
+                  label="Unavailability"
+                  density="compact"
+                  hide-details
+                />
+                <v-checkbox
+                  v-model="calendarFilters.showShifts"
+                  label="Shifts"
+                  density="compact"
+                  hide-details
+                />
+              </div>
+
+              <v-btn variant="text" @click="reloadEditUserCalendarData">Refresh</v-btn>
+            </div>
+
+            <UserCalendar
+              ref="editUserCalendar"
+              :events="filteredUserCalendarEvents"
+              initialView="timeGridWeek"
+              :isEditable="false"
+              :isSelectable="false"
+            />
+
+            <v-alert
+              v-if="filteredUserCalendarEvents.length === 0"
+              type="info"
+              variant="tonal"
+              class="mt-3"
+            >
+              No events to display with the current filters.
+            </v-alert>
+          </v-window-item>
+        </v-window>
+      </div>
+
+      <div class="d-flex justify-end ga-2 mt-2">
+        <v-btn variant="text" @click="closeEditUserDialog">Close</v-btn>
+        <v-btn
+          color="#8b1e1e"
+          class="text-white"
+          :loading="editDialog.saving"
+          :disabled="editDialog.saving"
+          @click="saveEditUserDialog"
+        >
+          Save
+        </v-btn>
+      </div>
+    </v-card>
+  </v-dialog>
   </v-container>
+
+  <v-dialog v-model="managePositionsDialog.open" max-width="860">
+    <v-card class="pa-4">
+      <div class="d-flex align-center justify-space-between mb-3">
+        <h3 class="text-h6 font-weight-bold">Manage Positions</h3>
+        <v-btn icon="mdi-close" variant="text" @click="closeManagePositionsDialog" />
+      </div>
+
+      <v-alert
+        v-if="managePositionsDialog.error"
+        type="error"
+        variant="tonal"
+        class="mb-3"
+      >
+        {{ managePositionsDialog.error }}
+      </v-alert>
+
+      <v-card variant="outlined" class="manage-position-list-card">
+        <div class="manage-position-table-scroll">
+          <v-table>
+          <thead>
+            <tr>
+              <th>Position</th>
+              <th class="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="position in availablePositions" :key="getPositionId(position)">
+              <td>{{ position.title || `Position ${getPositionId(position)}` }}</td>
+              <td class="text-right">
+                <v-btn
+                  size="small"
+                  variant="text"
+                  class="text-none"
+                  @click="startEditManagedPosition(position)"
+                >
+                  Edit
+                </v-btn>
+                <v-btn
+                  size="small"
+                  variant="text"
+                  icon="mdi-account"
+                  @click="openManagedPositionAssignments(position)"
+                />
+                <v-btn
+                  size="small"
+                  variant="text"
+                  color="error"
+                  class="text-none"
+                  :loading="managePositionsDialog.deletingID === getPositionId(position)"
+                  @click="deleteManagedPosition(position)"
+                >
+                  Delete
+                </v-btn>
+              </td>
+            </tr>
+            <tr @click="startAddManagedPosition" class="manage-position-add-row">
+              <td colspan="2">
+                <div class="d-flex align-center ga-2">
+                  <v-icon size="18">mdi-plus</v-icon>
+                  <span>Add new position</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+          </v-table>
+        </div>
+      </v-card>
+
+      <v-expand-transition>
+        <v-card
+          v-if="managePositionsDialog.form.open"
+          variant="outlined"
+          class="pa-4 mt-4 manage-position-form-card"
+        >
+          <div class="text-subtitle-1 font-weight-bold mb-3">
+            {{ managePositionsDialog.form.positionID ? "Edit Position" : "Add Position" }}
+          </div>
+
+          <v-text-field
+            v-model="managePositionsDialog.form.title"
+            label="Position name"
+            variant="outlined"
+            density="comfortable"
+            hide-details="auto"
+            autofocus
+            class="mb-4"
+            @keyup.enter="submitManagedPosition"
+          />
+
+          <div class="d-flex justify-end ga-2">
+            <v-btn variant="text" @click="resetManagePositionForm">Cancel</v-btn>
+            <v-btn
+              color="#8b1e1e"
+              class="text-white"
+              :loading="managePositionsDialog.saving"
+              :disabled="managePositionsDialog.saving"
+              @click="submitManagedPosition"
+            >
+              {{ managePositionsDialog.form.positionID ? "Save Changes" : "Add Position" }}
+            </v-btn>
+          </div>
+        </v-card>
+      </v-expand-transition>
+
+      <v-expand-transition>
+        <v-card
+          v-if="managePositionsDialog.assignment.open && selectedManagedPosition"
+          variant="outlined"
+          class="pa-4 mt-4 manage-position-form-card manage-position-assignment-card"
+        >
+          <div class="manage-position-assignment-content">
+            <div class="text-subtitle-1 font-weight-bold mb-1">
+              Assign Workers
+            </div>
+
+            <div class="text-body-2 text-medium-emphasis mb-4">
+              {{ selectedManagedPosition.title || `Position ${getPositionId(selectedManagedPosition)}` }}
+            </div>
+
+            <div class="manage-position-assignment-list">
+              <v-checkbox
+                v-for="worker in workers"
+                :key="getUserId(worker)"
+                v-model="managePositionsDialog.assignment.selectedUserIDs"
+                :label="worker.name"
+                :value="getUserId(worker)"
+                density="compact"
+                hide-details
+              />
+            </div>
+          </div>
+
+          <div class="d-flex justify-end ga-2 mt-4 manage-position-assignment-actions">
+            <v-btn variant="text" @click="closeManagedPositionAssignments">Cancel</v-btn>
+            <v-btn
+              color="#8b1e1e"
+              class="text-white"
+              :loading="managePositionsDialog.assignmentSaving"
+              :disabled="managePositionsDialog.assignmentSaving"
+              @click="saveManagedPositionAssignments"
+            >
+              Save Assignments
+            </v-btn>
+          </div>
+        </v-card>
+      </v-expand-transition>
+
+      <div class="d-flex justify-end ga-2 mt-4">
+        <v-btn variant="text" @click="closeManagePositionsDialog">Close</v-btn>
+      </div>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script>
 import apiClient from "../services/services.js";
 import departmentUsersServices from "../services/departmentUsersServices.js";
+import positionServices from "../services/positionServices.js";
 import userServices from "../services/userServices.js";
+import userPostionServices from "../services/userPostionServices.js";
 import userShiftServices from "../services/userShiftServices.js";
 import shiftServices from "../services/shiftServices.js";
 import scheduleServices from "../services/scheduleServices.js";
@@ -173,10 +471,46 @@ export default {
         tab: "info",
         user: null,
       },
+      editDialog: {
+        open: false,
+        tab: "info",
+        user: null,
+        saving: false,
+        error: "",
+        form: {
+          status: "active",
+          positionIDs: [],
+        },
+      },
 
       calendarFilters: {
         showUnavailability: true,
         showShifts: true,
+      },
+
+      availablePositions: [],
+      workerPositionsByUserID: {},
+      workerPositionSelections: {},
+      positionsLoading: false,
+      savingPositionUserIDs: {},
+      managerDepartmentID: null,
+      managePositionsDialog: {
+        open: false,
+        saving: false,
+        deletingID: null,
+        assignmentSaving: false,
+        error: "",
+        pendingUserID: null,
+        selectedPositionID: null,
+        form: {
+          open: false,
+          positionID: null,
+          title: "",
+        },
+        assignment: {
+          open: false,
+          selectedUserIDs: [],
+        },
       },
 
       // all events for the selected user (unavailability + shifts)
@@ -196,7 +530,15 @@ export default {
       });
     },
 
-    
+    selectedManagedPosition() {
+      const selectedID = this.managePositionsDialog.selectedPositionID;
+      if (!selectedID) return null;
+      return (
+        this.availablePositions.find(
+          (position) => String(this.getPositionId(position)) === String(selectedID)
+        ) || null
+      );
+    },
 
     filteredUserCalendarEvents() {
       return this.userCalendarEvents.filter((e) => {
@@ -221,14 +563,38 @@ export default {
         this.$nextTick(() => setTimeout(() => this.$refs.userCalendar?.updateSize(), 100));
       }
     },
+    "editDialog.open"(open) {
+      if (open) {
+        this.$nextTick(() => setTimeout(() => this.$refs.editUserCalendar?.updateSize(), 100));
+      }
+    },
+    "editDialog.tab"(tab) {
+      if (tab === "calendar") {
+        this.$nextTick(() => setTimeout(() => this.$refs.editUserCalendar?.updateSize(), 100));
+      }
+    },
     filteredUserCalendarEvents() {
-      this.$nextTick(() => setTimeout(() => this.$refs.userCalendar?.updateSize(), 50));
+      this.$nextTick(() => {
+        setTimeout(() => {
+          this.$refs.userCalendar?.updateSize();
+          this.$refs.editUserCalendar?.updateSize();
+        }, 50);
+      });
     },
   },
 
   methods: {
     isNotFound(error) {
       return Boolean(error?.response?.status === 404);
+    },
+
+    extractArray(payload, keys = []) {
+      if (Array.isArray(payload)) return payload;
+      for (const key of keys) {
+        if (Array.isArray(payload?.[key])) return payload[key];
+      }
+      if (Array.isArray(payload?.data)) return payload.data;
+      return [];
     },
 
     getDateTime(date, time) {
@@ -240,6 +606,123 @@ export default {
 
     getUserId(user) {
       return user?.ID ?? user?.id ?? user?.userID ?? null;
+    },
+
+    getPositionId(position) {
+      return position?.positionID ?? position?.ID ?? position?.id ?? null;
+    },
+
+    async loadPositions(departmentID) {
+      const res = await positionServices.getAll({ departmentID, isActive: true, limit: 200 });
+      this.availablePositions = this.extractArray(res, ["positions"]);
+    },
+
+    buildPositionItems(positions) {
+      const items = positions.map((position) => ({
+        value: this.getPositionId(position),
+        title: position.title || `Position ${this.getPositionId(position)}`,
+      }));
+
+      items.push({
+        value: "__add_new__",
+        title: "Manage positions",
+      });
+
+      return items;
+    },
+
+    async loadWorkerPositions() {
+      const res = await userPostionServices.getAll();
+      const links = this.extractArray(res, ["userpositions"]);
+      const workerIDs = new Set(this.workers.map((worker) => String(this.getUserId(worker))));
+      const positionsByID = this.availablePositions.reduce((acc, position) => {
+        const positionID = this.getPositionId(position);
+        if (positionID) acc[String(positionID)] = position;
+        return acc;
+      }, {});
+
+      this.workerPositionsByUserID = links.reduce((acc, link) => {
+        const userID = String(link?.userID ?? link?.UserID ?? "");
+        const positionID = String(link?.positionID ?? link?.PositionID ?? "");
+
+        if (!workerIDs.has(userID)) return acc;
+        if (!positionsByID[positionID]) return acc;
+
+        if (!acc[userID]) acc[userID] = [];
+        acc[userID].push(positionsByID[positionID]);
+        return acc;
+      }, {});
+    },
+
+    getWorkerPositionNames(worker) {
+      const userID = String(this.getUserId(worker) ?? "");
+      const positions = this.workerPositionsByUserID[userID] || [];
+      return positions.map(
+        (position) => position.title || `Position ${this.getPositionId(position)}`
+      );
+    },
+
+    getWorkerPositionIDs(worker) {
+      const userID = String(this.getUserId(worker) ?? "");
+      const positions = this.workerPositionsByUserID[userID] || [];
+      return positions.map((position) => this.getPositionId(position)).filter(Boolean);
+    },
+
+    getManagedPositionWorkers() {
+      const positionID = this.managePositionsDialog.selectedPositionID;
+      if (!positionID) return [];
+
+      return this.workers.filter((worker) => {
+        const userID = String(this.getUserId(worker) ?? "");
+        const positions = this.workerPositionsByUserID[userID] || [];
+        return positions.some(
+          (position) => String(this.getPositionId(position)) === String(positionID)
+        );
+      });
+    },
+
+    getWorkerPositionItems(worker) {
+      const userID = String(this.getUserId(worker) ?? "");
+      const assignedIDs = new Set(
+        (this.workerPositionsByUserID[userID] || []).map((position) =>
+          String(this.getPositionId(position))
+        )
+      );
+
+      const unassignedPositions = this.availablePositions.filter(
+        (position) => !assignedIDs.has(String(this.getPositionId(position)))
+      );
+
+      return this.buildPositionItems(unassignedPositions);
+    },
+
+    isSavingWorkerPosition(worker) {
+      return Boolean(this.savingPositionUserIDs[String(this.getUserId(worker) ?? "")]);
+    },
+
+    selectManagedPosition(position) {
+      const positionID = this.getPositionId(position);
+      this.managePositionsDialog = {
+        ...this.managePositionsDialog,
+        selectedPositionID: positionID,
+      };
+    },
+
+    startAddManagedPosition() {
+      this.managePositionsDialog = {
+        ...this.managePositionsDialog,
+        error: "",
+        form: {
+          open: true,
+          positionID: null,
+          title: "",
+        },
+        assignment: {
+          ...this.managePositionsDialog.assignment,
+          open: false,
+          selectedUserIDs: [],
+        },
+      };
     },
 
     normalizeUnavailabilityEvent(rawBlock) {
@@ -328,13 +811,19 @@ export default {
       return managerLink?.departmentID ?? null;
     },
 
+    async loadManagerContext() {
+      const departmentID = await this.getManagerDepartmentID();
+      this.managerDepartmentID = departmentID ?? null;
+      return { departmentID };
+    },
+
     async loadWorkers() {
       this.loading = true;
       this.error = "";
       this.workers = [];
 
       try {
-        const departmentID = await this.getManagerDepartmentID();
+        const { departmentID } = await this.loadManagerContext();
         if (!departmentID) {
           this.error = "No department found for this manager (check department_users for manager row).";
           return;
@@ -358,11 +847,15 @@ export default {
         const users = await Promise.all(userIDs.map((id) => userServices.get(id)));
 
         this.workers = users.filter((u) => String(u.role || "").toLowerCase() === "worker");
+        this.positionsLoading = true;
+        await this.loadPositions(departmentID);
+        await this.loadWorkerPositions();
       } catch (e) {
         this.error = e?.response?.data?.message || "Failed to load workers.";
         console.error(e?.response?.data || e);
       } finally {
         this.loading = false;
+        this.positionsLoading = false;
       }
     },
 
@@ -370,8 +863,7 @@ export default {
       this.viewDialog.user = user;
       this.viewDialog.tab = "info";
       this.viewDialog.open = true;
-
-      await this.reloadUserCalendarData();
+      await this.loadCalendarDataForUser(user);
     },
 
     closeViewDialog() {
@@ -380,8 +872,397 @@ export default {
       this.userCalendarEvents = [];
     },
 
-    async reloadUserCalendarData() {
-      const user = this.viewDialog.user;
+    async openEditUserDialog(user) {
+      this.editDialog.user = user;
+      this.editDialog.tab = "info";
+      this.editDialog.error = "";
+      this.editDialog.form = {
+        status: String(user?.status || "").toLowerCase() === "active" ? "active" : "inactive",
+        positionIDs: this.getWorkerPositionIDs(user),
+      };
+      this.editDialog.open = true;
+      await this.loadCalendarDataForUser(user);
+    },
+
+    closeEditUserDialog() {
+      this.editDialog.open = false;
+      this.editDialog.user = null;
+      this.editDialog.error = "";
+      this.editDialog.saving = false;
+      this.editDialog.form = {
+        status: "active",
+        positionIDs: [],
+      };
+    },
+
+    async saveEditUserDialog() {
+      const user = this.editDialog.user;
+      const userID = this.getUserId(user);
+      if (!userID) return;
+
+      const currentPositionIDs = new Set(this.getWorkerPositionIDs(user).map((id) => String(id)));
+      const nextPositionIDs = new Set(this.editDialog.form.positionIDs.map((id) => String(id)));
+      const positionIDsToAdd = [...nextPositionIDs].filter((id) => !currentPositionIDs.has(id));
+      const positionIDsToRemove = [...currentPositionIDs].filter((id) => !nextPositionIDs.has(id));
+
+      this.editDialog.saving = true;
+      this.editDialog.error = "";
+
+      try {
+        await userServices.update(userID, {
+          status: this.editDialog.form.status,
+        });
+
+        await Promise.all([
+          ...positionIDsToAdd.map((positionID) =>
+            userPostionServices.create({ userID, positionID })
+          ),
+          ...positionIDsToRemove.map((positionID) =>
+            userPostionServices.deleteByPair(userID, positionID)
+          ),
+        ]);
+
+        await this.loadWorkers();
+        const refreshedUser =
+          this.workers.find((worker) => String(this.getUserId(worker)) === String(userID)) || user;
+        this.editDialog.user = refreshedUser;
+        this.closeEditUserDialog();
+      } catch (error) {
+        console.error("Failed to save user edits:", error?.response?.data || error);
+        this.editDialog.error = error?.response?.data?.message || "Failed to save worker changes.";
+      } finally {
+        this.editDialog.saving = false;
+      }
+    },
+
+    openManagePositionsDialog(userID = null) {
+      this.managePositionsDialog = {
+        open: true,
+        saving: false,
+        deletingID: null,
+        assignmentSaving: false,
+        error: "",
+        pendingUserID: userID,
+        selectedPositionID: null,
+        form: {
+          open: false,
+          positionID: null,
+          title: "",
+        },
+        assignment: {
+          open: false,
+          selectedUserIDs: [],
+        },
+      };
+    },
+
+    closeManagePositionsDialog() {
+      this.managePositionsDialog = {
+        open: false,
+        saving: false,
+        deletingID: null,
+        assignmentSaving: false,
+        error: "",
+        pendingUserID: null,
+        selectedPositionID: null,
+        form: {
+          open: false,
+          positionID: null,
+          title: "",
+        },
+        assignment: {
+          open: false,
+          selectedUserIDs: [],
+        },
+      };
+    },
+
+    resetManagePositionForm() {
+      this.managePositionsDialog = {
+        ...this.managePositionsDialog,
+        error: "",
+        form: {
+          open: false,
+          positionID: null,
+          title: "",
+        },
+      };
+    },
+
+    startEditManagedPosition(position) {
+      this.managePositionsDialog = {
+        ...this.managePositionsDialog,
+        error: "",
+        selectedPositionID: this.getPositionId(position),
+        form: {
+          open: true,
+          positionID: this.getPositionId(position),
+          title: position?.title || "",
+        },
+        assignment: {
+          ...this.managePositionsDialog.assignment,
+          open: false,
+          selectedUserIDs: [],
+        },
+      };
+    },
+
+    openManagedPositionAssignments(position) {
+      const positionID = this.getPositionId(position);
+      const selectedUserIDs = this.workers
+        .filter((worker) => {
+          const userID = String(this.getUserId(worker) ?? "");
+          const positions = this.workerPositionsByUserID[userID] || [];
+          return positions.some(
+            (workerPosition) => String(this.getPositionId(workerPosition)) === String(positionID)
+          );
+        })
+        .map((worker) => this.getUserId(worker));
+
+      this.managePositionsDialog = {
+        ...this.managePositionsDialog,
+        error: "",
+        selectedPositionID: positionID,
+        assignment: {
+          open: true,
+          selectedUserIDs,
+        },
+        form: {
+          ...this.managePositionsDialog.form,
+          open: false,
+        },
+      };
+    },
+
+    closeManagedPositionAssignments() {
+      this.managePositionsDialog = {
+        ...this.managePositionsDialog,
+        assignment: {
+          open: false,
+          selectedUserIDs: [],
+        },
+      };
+    },
+
+    async submitManagedPosition() {
+      const title = this.managePositionsDialog.form.title.trim();
+      const targetUserID = this.managePositionsDialog.pendingUserID;
+      const editingPositionID = this.managePositionsDialog.form.positionID;
+      if (!title) {
+        this.managePositionsDialog.error = "Position name is required.";
+        return;
+      }
+
+      let departmentID = this.managerDepartmentID;
+
+      if (!departmentID) {
+        const context = await this.loadManagerContext();
+        departmentID = context.departmentID;
+      }
+
+      if (!departmentID) {
+        this.managePositionsDialog.error = "Unable to determine the manager's department.";
+        return;
+      }
+
+      this.managePositionsDialog = {
+        ...this.managePositionsDialog,
+        saving: true,
+        error: "",
+      };
+
+      try {
+        let response;
+        if (editingPositionID) {
+          response = await positionServices.update(editingPositionID, {
+            title,
+            departmentID,
+          });
+        } else {
+          response = await positionServices.create({
+            title,
+            departmentID,
+            isActive: true,
+          });
+        }
+
+        const createdPosition = response?.data || response;
+        await this.loadPositions(departmentID);
+        await this.loadWorkerPositions();
+
+        const affectedPositionID = editingPositionID || this.getPositionId(createdPosition);
+        this.managePositionsDialog = {
+          ...this.managePositionsDialog,
+          selectedPositionID: affectedPositionID,
+        };
+        if (!editingPositionID && affectedPositionID) {
+          const worker = this.workers.find(
+            (item) => String(this.getUserId(item)) === String(targetUserID)
+          );
+          if (worker) {
+            await this.assignWorkerPosition(worker, affectedPositionID);
+          }
+        }
+
+        this.managePositionsDialog = {
+          ...this.managePositionsDialog,
+          saving: false,
+          error: "",
+          pendingUserID: null,
+          form: {
+            open: false,
+            positionID: null,
+            title: "",
+          },
+        };
+      } catch (error) {
+        console.error("Failed to create position:", error?.response?.data || error);
+        this.managePositionsDialog = {
+          ...this.managePositionsDialog,
+          saving: false,
+          error: error?.response?.data?.message || "Failed to create position.",
+        };
+      }
+    },
+
+    async deleteManagedPosition(position) {
+      const positionID = this.getPositionId(position);
+      if (!positionID) return;
+
+      this.managePositionsDialog = {
+        ...this.managePositionsDialog,
+        deletingID: positionID,
+        error: "",
+      };
+
+      try {
+        await positionServices.delete(positionID);
+        await this.loadPositions(this.managerDepartmentID);
+        await this.loadWorkerPositions();
+
+        if (this.managePositionsDialog.form.positionID === positionID) {
+          this.resetManagePositionForm();
+        }
+
+        if (String(this.managePositionsDialog.selectedPositionID) === String(positionID)) {
+          this.managePositionsDialog = {
+            ...this.managePositionsDialog,
+            selectedPositionID: null,
+            assignment: {
+              open: false,
+              selectedUserIDs: [],
+            },
+          };
+        }
+      } catch (error) {
+        console.error("Failed to delete position:", error?.response?.data || error);
+        this.managePositionsDialog = {
+          ...this.managePositionsDialog,
+          deletingID: null,
+          error: error?.response?.data?.message || "Failed to delete position.",
+        };
+        return;
+      }
+
+      this.managePositionsDialog = {
+        ...this.managePositionsDialog,
+        deletingID: null,
+      };
+    },
+
+    async saveManagedPositionAssignments() {
+      const positionID = this.managePositionsDialog.selectedPositionID;
+      if (!positionID) return;
+
+      const selectedUserIDs = new Set(
+        this.managePositionsDialog.assignment.selectedUserIDs.map((id) => String(id))
+      );
+      const currentUserIDs = new Set(
+        this.getManagedPositionWorkers().map((worker) => String(this.getUserId(worker)))
+      );
+
+      const toAdd = [...selectedUserIDs].filter((id) => !currentUserIDs.has(id));
+      const toRemove = [...currentUserIDs].filter((id) => !selectedUserIDs.has(id));
+
+      this.managePositionsDialog = {
+        ...this.managePositionsDialog,
+        assignmentSaving: true,
+        error: "",
+      };
+
+      try {
+        await Promise.all([
+          ...toAdd.map((userID) => userPostionServices.create({ userID, positionID })),
+          ...toRemove.map((userID) => userPostionServices.deleteByPair(userID, positionID)),
+        ]);
+        await this.loadWorkerPositions();
+      } catch (error) {
+        console.error("Failed to save position assignments:", error?.response?.data || error);
+        this.managePositionsDialog = {
+          ...this.managePositionsDialog,
+          assignmentSaving: false,
+          error: error?.response?.data?.message || "Failed to save worker assignments.",
+        };
+        return;
+      }
+
+      this.managePositionsDialog = {
+        ...this.managePositionsDialog,
+        assignmentSaving: false,
+        assignment: {
+          open: false,
+          selectedUserIDs: [],
+        },
+      };
+    },
+
+    async assignWorkerPosition(worker, value) {
+      const userID = this.getUserId(worker);
+      const userKey = String(userID ?? "");
+
+      if (!value) {
+        return;
+      }
+
+      if (value === "__add_new__") {
+        this.workerPositionSelections = {
+          ...this.workerPositionSelections,
+          [userKey]: null,
+        };
+        this.openManagePositionsDialog(userID);
+        return;
+      }
+
+      if (!userID) {
+        return;
+      }
+
+      this.savingPositionUserIDs = {
+        ...this.savingPositionUserIDs,
+        [userKey]: true,
+      };
+      try {
+        await userPostionServices.create({
+          userID,
+          positionID: value,
+        });
+
+        await this.loadWorkerPositions();
+      } catch (error) {
+        console.error("Failed to assign position:", error?.response?.data || error);
+      } finally {
+        this.workerPositionSelections = {
+          ...this.workerPositionSelections,
+          [userKey]: null,
+        };
+        this.savingPositionUserIDs = {
+          ...this.savingPositionUserIDs,
+          [userKey]: false,
+        };
+      }
+    },
+
+    async loadCalendarDataForUser(user) {
       const userID = this.getUserId(user);
       if (!userID) return;
 
@@ -441,8 +1322,17 @@ export default {
       this.$nextTick(() => {
         setTimeout(() => {
           this.$refs.userCalendar?.updateSize();
+          this.$refs.editUserCalendar?.updateSize();
         }, 100);
       });
+    },
+
+    async reloadUserCalendarData() {
+      await this.loadCalendarDataForUser(this.viewDialog.user);
+    },
+
+    async reloadEditUserCalendarData() {
+      await this.loadCalendarDataForUser(this.editDialog.user);
     },
   },
 };
@@ -463,5 +1353,61 @@ export default {
 
 .manager-user-window {
   min-height: 0;
+}
+
+.manage-position-form-card {
+  background: #fff;
+  border-color: rgba(139, 30, 30, 0.14);
+}
+
+.fill-height {
+  height: 100%;
+}
+
+.manage-position-list-card :deep(table tbody tr.manage-position-add-row) {
+  cursor: pointer;
+}
+
+.manage-position-table-scroll {
+  max-height: 34vh;
+  overflow-y: auto;
+}
+
+.manage-position-assignment-card {
+  max-height: 55vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.manage-position-assignment-content {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.manage-position-assignment-list {
+  height: 26vh;
+  overflow-y: scroll;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  padding: 8px 12px;
+  padding-right: 8px;
+  background: #fff;
+}
+
+.manage-position-assignment-actions {
+  flex: 0 0 auto;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  padding-top: 12px;
+}
+
+.edit-user-details-card {
+  max-width: 620px;
+}
+
+.edit-position-list {
+  max-height: 26vh;
+  overflow-y: auto;
+  padding-right: 8px;
 }
 </style>

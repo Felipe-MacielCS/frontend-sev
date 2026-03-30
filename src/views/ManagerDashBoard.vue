@@ -339,10 +339,9 @@
                 :items="positionItems"
                 item-title="label"
                 item-value="value"
-                label="Position (Optional)"
+                label="Position"
                 variant="outlined"
                 density="comfortable"
-                clearable
               />
             </v-col>
             <v-col cols="12" sm="6">
@@ -549,6 +548,7 @@ export default {
         !f.shift_date ||
         !f.start_time ||
         !f.end_time ||
+        !f.positionID ||
         Number(f.workers_required) < 1
       ) {
         return false;
@@ -1316,7 +1316,7 @@ export default {
           end_time: this.toHHMM(form.end_time),
           workers_required: Number(form.workers_required) || 1,
           scheduleID: this.selectedScheduleID,
-          positionID: form.positionID || null,
+          positionID: form.positionID,
         };
 
         if (this.shiftDialog.mode === "create") {
