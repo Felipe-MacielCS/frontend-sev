@@ -6,15 +6,26 @@
         <v-card elevation="2" class="bg-white rounded-lg">
           <v-card-title class="d-flex align-center justify-space-between px-4 pt-3 pb-1">
             <span class="text-subtitle-1 font-weight-bold">Calendar</span>
-            <v-btn
-              color="primary"
-              size="small"
-              variant="flat"
-              prepend-icon="mdi-plus"
-              @click="openQuickAddDialog"
-            >
-              Add
-            </v-btn>
+            <div class="d-flex flex-wrap align-center ga-2">
+              <v-btn
+                color="primary"
+                size="small"
+                variant="tonal"
+                prepend-icon="mdi-calendar-import"
+                @click="openCalendarDialog"
+              >
+                Import Calendar
+              </v-btn>
+              <v-btn
+                color="primary"
+                size="small"
+                variant="flat"
+                prepend-icon="mdi-plus"
+                @click="openQuickAddDialog"
+              >
+                Add
+              </v-btn>
+            </div>
           </v-card-title>
 
           <v-card-text class="pa-2">
@@ -127,6 +138,45 @@
       </v-card>
     </v-dialog>
 
+    <v-dialog v-model="calendarDialog" max-width="640">
+      <v-card>
+        <v-card-title class="text-h6">Import Calendar</v-card-title>
+        <v-card-text>
+          <input
+            ref="calendarFileInput"
+            type="file"
+            accept=".ics,text/calendar"
+            class="d-none"
+            @change="handleCalendarFileSelected"
+          />
+
+          <v-btn
+            color="primary"
+            variant="tonal"
+            prepend-icon="mdi-file-upload-outline"
+            @click="openCalendarFilePicker"
+          >
+            Choose .ics File
+          </v-btn>
+
+          <div v-if="calendarForm.fileName" class="text-body-2 mt-3">
+            {{ calendarForm.fileName }}
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="calendarDialog = false">Close</v-btn>
+          <v-btn
+            color="primary"
+            :loading="isImportingCalendar"
+            @click="importCalendarFeed"
+          >
+            Import
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-model="deleteDialog" max-width="500">
       <v-card>
         <v-card-title class="text-h6">Delete Unavailability</v-card-title>
@@ -161,6 +211,7 @@
 
 <script>
 import Calendar from "../components/Calendar.vue";
+import calendarServices from "../services/calendarServices.js";
 import apiClient from "../services/services.js";
 import Utils from "../config/utils.js";
 
@@ -171,6 +222,12 @@ export default {
     return {
       user: Utils.getStore("user"),
       unavailabilityBlocks: [],
+      calendarDialog: false,
+      isImportingCalendar: false,
+      calendarForm: {
+        fileName: "",
+        icalData: "",
+      },
 
       addDialog: false,
       deleteDialog: false,
@@ -200,7 +257,7 @@ export default {
     };
   },
   mounted() {
-    if (this.user && this.user.userID) {
+    if (this.getCurrentUserID()) {
       this.fetchSavedBlocks();
     }
   },
@@ -282,11 +339,11 @@ export default {
           rawBlock.unavailableID ||
           rawBlock.ID ||
           rawBlock.id,
-        title: rawBlock.title || rawBlock.reason || "Unavailable",
+        title: "Unavailable",
         start,
         end,
         reason: rawBlock.reason || rawBlock.title || "",
-        color: "#F44336",
+        color: rawBlock.reason === "Google Sync" ? "#1D4E89" : "#F44336",
         display: "block"
       };
     },
@@ -306,6 +363,62 @@ export default {
       this.snackbar.message = message;
       this.snackbar.color = color;
       this.snackbar.show = true;
+    },
+    getCurrentUser() {
+      return this.user?.user ?? this.user ?? null;
+    },
+    getCurrentUserID() {
+      const currentUser = this.getCurrentUser();
+      const userID = Number(currentUser?.userID ?? currentUser?.ID ?? currentUser?.id);
+      return Number.isFinite(userID) && userID > 0 ? userID : null;
+    },
+    openCalendarDialog() {
+      this.calendarDialog = true;
+    },
+    openCalendarFilePicker() {
+      this.$refs.calendarFileInput?.click();
+    },
+    async handleCalendarFileSelected(event) {
+      const file = event?.target?.files?.[0];
+      if (!file) return;
+
+      try {
+        this.calendarForm.fileName = file.name || "";
+        this.calendarForm.icalData = await file.text();
+      } catch (error) {
+        console.error("Failed to read calendar file:", error);
+        this.calendarForm.fileName = "";
+        this.calendarForm.icalData = "";
+      } finally {
+        if (event?.target) event.target.value = "";
+      }
+    },
+    async importCalendarFeed() {
+      const userID = this.getCurrentUserID();
+      if (!userID) {
+        return;
+      }
+
+      if (!String(this.calendarForm.icalData || "").trim()) {
+        return;
+      }
+
+      try {
+        this.isImportingCalendar = true;
+        await calendarServices.sync({
+          userID,
+          icalData: this.calendarForm.icalData,
+        });
+
+        await this.fetchSavedBlocks();
+        this.calendarDialog = false;
+        this.calendarForm.fileName = "";
+        this.calendarForm.icalData = "";
+      } catch (error) {
+        console.error("Failed to import calendar feed:", error?.response?.data || error);
+      } finally {
+        this.isImportingCalendar = false;
+      }
     },
 
     formatSelectionRange(selection) {
@@ -335,9 +448,12 @@ export default {
     },
 
     async fetchSavedBlocks() {
+      const userID = this.getCurrentUserID();
+      if (!userID) return;
+
       const endpoints = [
-        { path: `/unavailable/user/${this.user.userID}` },
-        { path: "/unavailable", params: { userID: this.user.userID } },
+        { path: `/unavailable/user/${userID}`, params: { limit: 1000 } },
+        { path: "/unavailable", params: { userID, limit: 1000 } },
         { path: "/unavailable" }
       ];
 
@@ -463,8 +579,9 @@ export default {
     },
 
     async createUnavailabilitySlot(slot, reason, isRecurring) {
+      const userID = this.getCurrentUserID();
       const payload = {
-        userID: this.user.userID,
+        userID,
         start_date: this.formatDateLocal(slot.start),
         end_date: this.formatDateLocal(slot.end),
         start_time: this.formatTimeLocal(slot.start),
@@ -477,8 +594,9 @@ export default {
     },
 
     async updateUnavailabilitySlot(id, slot, reason) {
+      const userID = this.getCurrentUserID();
       const payload = {
-        userID: this.user.userID,
+        userID,
         start_date: this.formatDateLocal(slot.start),
         end_date: this.formatDateLocal(slot.end),
         start_time: this.formatTimeLocal(slot.start),
