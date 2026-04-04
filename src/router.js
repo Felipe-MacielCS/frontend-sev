@@ -10,6 +10,7 @@ import ManagerDashboard from "./views/ManagerDashBoard.vue";
 import ManagerSettings from "./views/ManagerSettings.vue";
 import ManagerTemplates from "./views/ManagerTemplates.vue";
 import AvailabilityWorker from "./views/AvailabilityWorker.vue";
+import ManagerAvailability from "./views/ManagerAvailability.vue";
 import ManagerUsers from "./views/ManagerUsers.vue";
 import ManagerTradeBoard from "./views/ManagerTradeBoard.vue";
 import WorkerTradeBoard from "./views/WorkerTradeBoard.vue";
@@ -55,6 +56,12 @@ const router = createRouter({
       path: "/manager/settings",
       name: "managerSettings",
       component: ManagerSettings,
+      meta: { role: "Manager" },
+    },
+    {
+      path: "/manager/availability",
+      name: "managerAvailability",
+      component: ManagerAvailability,
       meta: { role: "Manager" },
     },
     {
