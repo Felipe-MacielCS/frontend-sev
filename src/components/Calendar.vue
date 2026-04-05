@@ -20,6 +20,7 @@ export default {
     isSelectable: { type: Boolean, default: false },
     height: { type: [Number, String], default: "auto" },
     contentHeight: { type: [Number, String], default: "auto" },
+    firstDay: { type: Number, default: 0 },
   },
   data() {
     return {
@@ -31,6 +32,7 @@ export default {
           center: "title",
           right: "dayGridMonth,timeGridWeek,timeGridDay",
         },
+        firstDay: this.firstDay,
         height: this.height,
         contentHeight: this.contentHeight,
         expandRows: true,
@@ -49,6 +51,12 @@ export default {
     };
   },
   methods: {
+    handleDrawerToggle() {
+      this.$nextTick(() => {
+        setTimeout(() => this.updateSize(), 50);
+        setTimeout(() => this.updateSize(), 220);
+      });
+    },
     updateSize() {
       const api = this.$refs.fc?.getApi();
       if (api) api.updateSize();
@@ -66,6 +74,12 @@ export default {
         : null;
     },
   },
+  mounted() {
+    window.addEventListener("app-drawer-toggled", this.handleDrawerToggle);
+  },
+  beforeUnmount() {
+    window.removeEventListener("app-drawer-toggled", this.handleDrawerToggle);
+  },
   watch: {
     events(newEvents) {
       this.calendarOptions.events = newEvents;
@@ -78,6 +92,14 @@ export default {
     contentHeight(newH) {
       this.calendarOptions.contentHeight = newH;
       this.$nextTick(() => setTimeout(() => this.updateSize(), 0));
+    },
+    firstDay(newValue) {
+      this.calendarOptions.firstDay = newValue;
+      const api = this.$refs.fc?.getApi();
+      if (api) {
+        api.setOption("firstDay", newValue);
+        this.$nextTick(() => setTimeout(() => this.updateSize(), 0));
+      }
     },
   },
 };

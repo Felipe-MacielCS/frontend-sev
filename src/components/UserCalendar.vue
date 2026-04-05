@@ -48,10 +48,22 @@ export default {
     };
   },
   methods: {
+    handleDrawerToggle() {
+      this.$nextTick(() => {
+        setTimeout(() => this.updateSize(), 50);
+        setTimeout(() => this.updateSize(), 220);
+      });
+    },
     updateSize() {
       const api = this.$refs.fc?.getApi();
       if (api) api.updateSize();
     },
+  },
+  mounted() {
+    window.addEventListener("app-drawer-toggled", this.handleDrawerToggle);
+  },
+  beforeUnmount() {
+    window.removeEventListener("app-drawer-toggled", this.handleDrawerToggle);
   },
   watch: {
     events(newEvents) {
@@ -65,5 +77,30 @@ export default {
 <style scoped>
 .fc {
   font-family: "Roboto", sans-serif;
+}
+
+:deep(.fc-theme-standard .fc-scrollgrid),
+:deep(.fc-theme-standard td),
+:deep(.fc-theme-standard th) {
+  border-color: rgba(var(--v-theme-on-surface), 0.16);
+}
+
+:deep(.fc .fc-timegrid-slot),
+:deep(.fc .fc-timegrid-axis),
+:deep(.fc .fc-col-header-cell),
+:deep(.fc .fc-timegrid-divider),
+:deep(.fc .fc-daygrid-day-frame) {
+  background-color: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+}
+
+:deep(.fc .fc-timegrid-axis-cushion),
+:deep(.fc .fc-col-header-cell-cushion),
+:deep(.fc .fc-toolbar-title) {
+  color: rgb(var(--v-theme-on-surface));
+}
+
+:deep(.fc .fc-day-today) {
+  background: rgba(var(--v-theme-primary), 0.12) !important;
 }
 </style>

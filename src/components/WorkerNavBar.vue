@@ -20,7 +20,7 @@
 
     <v-spacer></v-spacer>
 
-    <v-btn icon="mdi-cog" variant="text" class="mr-1"></v-btn>
+    <v-btn icon="mdi-cog" variant="text" class="mr-1" to="/worker/settings"></v-btn>
   </v-app-bar>
 
   <v-navigation-drawer
@@ -97,55 +97,6 @@
       </v-list-group>
     </v-list>
 
-    <template v-if="isWorkerDashboard">
-      <v-divider class="my-2" />
-      <div class="px-4 pt-2 pb-1 text-overline filter-title">Schedule Filters</div>
-
-      <div class="px-3 pb-4">
-        <v-select
-          v-model="filters.position"
-          :items="['Positions', 'Lifeguard', 'Desk']"
-          variant="outlined"
-          density="compact"
-          hide-details
-          class="mb-3"
-        />
-
-        <div class="text-caption font-weight-medium mb-1">Status</div>
-        <v-checkbox
-          v-model="filters.status"
-          label="All"
-          value="all"
-          density="compact"
-          hide-details
-          class="mb-n2"
-        />
-        <v-checkbox
-          v-model="filters.status"
-          label="Assigned"
-          value="assigned"
-          density="compact"
-          hide-details
-          class="mb-n2"
-        />
-        <v-checkbox
-          v-model="filters.status"
-          label="Open"
-          value="open"
-          density="compact"
-          hide-details
-          class="mb-3"
-        />
-
-        <v-select
-          v-model="filters.worker"
-          :items="['Workers', 'Felipe', 'John']"
-          variant="outlined"
-          density="compact"
-          hide-details
-        />
-      </div>
-    </template>
   </v-navigation-drawer>
 </template>
 
@@ -325,6 +276,11 @@ onMounted(() => {
 
 watch(drawer, (isOpen) => {
   localStorage.setItem(DRAWER_STORAGE_KEY, isOpen ? "1" : "0");
+  window.dispatchEvent(
+    new CustomEvent("app-drawer-toggled", {
+      detail: { scope: "worker", open: isOpen },
+    })
+  );
 });
 
 watch(
@@ -343,6 +299,7 @@ watch(
 );
 
 const navItems = [
+  { title: "Settings", to: "/worker/settings", icon: "mdi-cog-outline" },
   { title: "Schedule", to: "/worker", icon: "mdi-calendar-month-outline" },
   { title: "Clock In / Out", to: "/worker/clock", icon: "mdi-timer-outline" },
   { title: "Trade Board", to: "/worker/tradeboard", icon: "mdi-swap-horizontal" },

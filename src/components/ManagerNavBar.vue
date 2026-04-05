@@ -20,7 +20,7 @@
 
     <v-spacer></v-spacer>
 
-    <v-btn icon="mdi-cog" variant="text" class="mr-1"></v-btn>
+    <v-btn icon="mdi-cog" variant="text" class="mr-1" to="/manager/settings"></v-btn>
   </v-app-bar>
 
   <v-navigation-drawer
@@ -66,6 +66,11 @@ onMounted(() => {
 
 watch(drawer, (isOpen) => {
   localStorage.setItem(DRAWER_STORAGE_KEY, isOpen ? "1" : "0");
+  window.dispatchEvent(
+    new CustomEvent("app-drawer-toggled", {
+      detail: { scope: "manager", open: isOpen },
+    })
+  );
 });
 
 const navItems = [
@@ -76,6 +81,7 @@ const navItems = [
   { title: "Trade Board", to: "/manager/tradeboard", icon: "mdi-swap-horizontal" },
   { title: "Announcements", to: "/manager/announcements", icon: "mdi-bullhorn-outline" },
   { title: "Availability", to: "/manager/availability", icon: "mdi-calendar-clock-outline" },
+  { title: "Settings", to: "/manager/settings", icon: "mdi-cog-outline" },
 ];
 </script>
 

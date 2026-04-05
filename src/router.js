@@ -5,10 +5,14 @@ import Signup from "./views/Signup.vue";
 
 import WorkerDashboard from "./views/WorkerDashBoard.vue";
 import WorkerClockInOut from "./views/WorkerClockInOut.vue";
+import WorkerSettings from "./views/WorkerSettings.vue";
 import ManagerDashboard from "./views/ManagerDashBoard.vue";
+import ManagerSettings from "./views/ManagerSettings.vue";
 import ManagerTemplates from "./views/ManagerTemplates.vue";
 import AvailabilityWorker from "./views/AvailabilityWorker.vue";
+import ManagerAvailability from "./views/ManagerAvailability.vue";
 import ManagerUsers from "./views/ManagerUsers.vue";
+import ManagerTradeBoard from "./views/ManagerTradeBoard.vue";
 import WorkerTradeBoard from "./views/WorkerTradeBoard.vue";
 import Budget from "./views/Budget.vue";
 // import AdminDashboard from "./views/AdminDashBoard.vue";
@@ -49,6 +53,24 @@ const router = createRouter({
       component: ManagerUsers,
       meta: { role: "Manager" },
     },
+    {
+      path: "/manager/settings",
+      name: "managerSettings",
+      component: ManagerSettings,
+      meta: { role: "Manager" },
+    },
+    {
+      path: "/manager/availability",
+      name: "managerAvailability",
+      component: ManagerAvailability,
+      meta: { role: "Manager" },
+    },
+    {
+      path: "/manager/tradeboard",
+      name: "managerTradeBoard",
+      component: ManagerTradeBoard,
+      meta: { role: "Manager" },
+    },
 
     // Worker Routes
     {
@@ -80,6 +102,12 @@ const router = createRouter({
       name: "budget",
       component: Budget,
       meta: { role: "Manager" },
+    },
+    {
+      path: "/worker/settings",
+      name: "workerSettings",
+      component: WorkerSettings,
+      meta: { role: "Worker" },
     },
 
     // --- 404 Catch-all ---
