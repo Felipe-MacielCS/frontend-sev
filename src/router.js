@@ -14,6 +14,7 @@ import ManagerAvailability from "./views/ManagerAvailability.vue";
 import ManagerUsers from "./views/ManagerUsers.vue";
 import ManagerTradeBoard from "./views/ManagerTradeBoard.vue";
 import WorkerTradeBoard from "./views/WorkerTradeBoard.vue";
+import Budget from "./views/Budget.vue";
 // import AdminDashboard from "./views/AdminDashBoard.vue";
 
 // import WorkerProfile from "./views/WorkerProfile.vue";
@@ -95,6 +96,12 @@ const router = createRouter({
       name: "workerClockInOut",
       component: WorkerClockInOut,
       meta: { role: "Worker" },
+    },
+    {
+      path: "/manager/budget",
+      name: "budget",
+      component: Budget,
+      meta: { role: "Manager" },
     },
     {
       path: "/worker/settings",
