@@ -303,7 +303,7 @@ const navItems = [
   { title: "Schedule", to: "/worker", icon: "mdi-calendar-month-outline" },
   { title: "Clock In / Out", to: "/worker/clock", icon: "mdi-timer-outline" },
   { title: "Trade Board", to: "/worker/tradeboard", icon: "mdi-swap-horizontal" },
-  { title: "Announcements", to: "/manager/budget", icon: "mdi-bullhorn-outline" },
+  { title: "Announcements", to: "/worker/announcements", icon: "mdi-bullhorn-outline" },
   { title: "Availability", to: "/worker/availability", icon: "mdi-calendar-clock-outline" },
 ];
 </script>
