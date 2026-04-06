@@ -153,8 +153,7 @@
           variant="tonal"
           class="mt-5"
         >
-          Sent to <strong>{{ submitResult.recipientCount }}</strong> recipient<span v-if="submitResult.recipientCount !== 1">s</span>
-          in <strong>{{ submitResult.audienceLabel }}</strong>.
+          Sent!
         </v-alert>
 
         <v-alert
