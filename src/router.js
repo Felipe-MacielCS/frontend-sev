@@ -14,7 +14,9 @@ import ManagerAvailability from "./views/ManagerAvailability.vue";
 import ManagerUsers from "./views/ManagerUsers.vue";
 import ManagerTradeBoard from "./views/ManagerTradeBoard.vue";
 import WorkerTradeBoard from "./views/WorkerTradeBoard.vue";
+import WorkerAnnouncements from "./views/WorkerAnnouncements.vue";
 import Budget from "./views/Budget.vue";
+import ManagerAnnouncements from "./views/ManagerAnnouncements.vue";
 // import AdminDashboard from "./views/AdminDashBoard.vue";
 
 // import WorkerProfile from "./views/WorkerProfile.vue";
@@ -71,6 +73,12 @@ const router = createRouter({
       component: ManagerTradeBoard,
       meta: { role: "Manager" },
     },
+    {
+      path: "/manager/announcements",
+      name: "managerAnnouncements",
+      component: ManagerAnnouncements,
+      meta: { role: "Manager" },
+    },
 
     // Worker Routes
     {
@@ -89,6 +97,12 @@ const router = createRouter({
       path: "/worker/tradeboard",
       name: "workerTradeBoard",
       component: WorkerTradeBoard,
+      meta: { role: "Worker" },
+    },
+    {
+      path: "/worker/announcements",
+      name: "workerAnnouncements",
+      component: WorkerAnnouncements,
       meta: { role: "Worker" },
     },
     {
