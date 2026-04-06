@@ -105,14 +105,6 @@ const MANAGER_DARK_MODE_STORAGE_KEY = "manager_dark_mode_enabled";
 
 const MANAGER_SETTING_DEFINITIONS = [
   {
-    key: "department_display_name",
-    label: "Department Display Name",
-    value_type: "string",
-    default_value: "",
-    description: "Friendly name used in manager-facing pages.",
-    section: "general",
-  },
-  {
     key: "schedule_week_starts_monday",
     label: "Week Starts On Monday",
     value_type: "bool",
@@ -340,8 +332,7 @@ export default {
           };
         });
 
-        const displayNameRow = this.settingsRows.find((row) => row.key === "department_display_name");
-        this.departmentName = String(displayNameRow?.formValue || "").trim();
+        this.departmentName = "";
       } catch (error) {
         console.error("Failed to load manager settings:", error?.response?.data || error);
         this.error = error?.response?.data?.message || "Failed to load manager settings.";
@@ -359,8 +350,6 @@ export default {
           await this.persistSettingRow(settingRow);
         }
 
-        const displayNameRow = this.settingsRows.find((row) => row.key === "department_display_name");
-        this.departmentName = String(displayNameRow?.formValue || "").trim();
         const darkModeRow = this.settingsRows.find((row) => row.key === "manager_dark_mode");
         localStorage.setItem(
           MANAGER_DARK_MODE_STORAGE_KEY,

@@ -5,15 +5,20 @@
       <v-col cols="12" md="3">
         <v-card class="mb-4 pa-4 bg-grey-lighten-3" elevation="1">
           <div class="d-flex flex-column ga-2">
-            <v-btn color="primary" variant="flat" block @click="activePanel = 'overview'">
-              Overview
-            </v-btn>
-            <v-btn color="primary" :variant="activePanel === 'costs' ? 'flat' : 'tonal'" block @click="activePanel = 'costs'">
+            <button
+              type="button"
+              :class="['budget-nav-btn', { 'budget-nav-btn--active': activePanel === 'costs' }]"
+              @click="activePanel = 'costs'"
+            >
               Costs
-            </v-btn>
-            <v-btn color="primary" :variant="activePanel === 'settings' ? 'flat' : 'tonal'" block @click="activePanel = 'settings'">
+            </button>
+            <button
+              type="button"
+              :class="['budget-nav-btn', { 'budget-nav-btn--active': activePanel === 'settings' }]"
+              @click="activePanel = 'settings'"
+            >
               Budget Settings
-            </v-btn>
+            </button>
           </div>
         </v-card>
 
@@ -135,17 +140,19 @@
 
               <div class="donut-center">
                 <div class="text-subtitle-2 font-weight-bold">Total Budget</div>
-                <div class="text-h6">${{ formatCurrency(totalBudget) }}</div>
-                <div class="text-body-2 mt-2">Available: ${{ formatCurrency(availableBudget) }}</div>
-                <div class="text-body-2">Used: ${{ formatCurrency(budgetUsed) }}</div>
+                <div class="donut-value">${{ formatCurrency(totalBudget) }}</div>
+                <div class="donut-meta mt-2">Available: ${{ formatCurrency(availableBudget) }}</div>
+                <div class="donut-meta">Used: ${{ formatCurrency(budgetUsed) }}</div>
               </div>
             </div>
           </div>
         </v-card>
 
-        <v-card elevation="2" class="pa-4 bg-white rounded-lg">
+        <v-card v-if="activePanel !== 'settings'" elevation="2" class="pa-4 bg-white rounded-lg">
           <div class="d-flex align-center justify-space-between mb-3">
-            <div class="text-subtitle-1 font-weight-bold">Cost Breakdown</div>
+            <div class="text-subtitle-1 font-weight-bold">
+              {{ activePanel === "costs" ? "Manage Costs" : "Cost Breakdown" }}
+            </div>
           </div>
 
           <v-table>
@@ -231,7 +238,7 @@ export default {
   name: "Budget",
   data() {
     return {
-      activePanel: "overview",
+      activePanel: "costs",
       managerDepartmentID: null,
 
       budget: null,
@@ -267,7 +274,7 @@ export default {
 
   computed: {
     totalBudget() {
-      return Number(this.budget?.total_budget || this.budgetForm.total_budget || 0);
+      return Number(this.budgetForm.total_budget ?? this.budget?.total_budget ?? 0);
     },
 
     budgetUsed() {
@@ -475,6 +482,28 @@ export default {
 </script>
 
 <style scoped>
+.budget-nav-btn {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid rgba(114, 21, 26, 0.12);
+  background: #f1e2e1;
+  color: #72151a;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.budget-nav-btn--active {
+  border-color: transparent;
+  background: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary));
+}
+
 .donut-wrap {
   position: relative;
   width: 260px;
@@ -486,7 +515,27 @@ export default {
 
 .donut-center {
   position: absolute;
+  inset: 50%;
+  transform: translate(-50%, -50%);
   text-align: center;
-  width: 160px;
+  width: 136px;
+  max-width: 136px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2;
+}
+
+.donut-value {
+  font-size: 1rem;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.donut-meta {
+  font-size: 0.9rem;
+  line-height: 1.25;
+  word-break: break-word;
 }
 </style>

@@ -548,20 +548,29 @@ export default {
     },
     normalizeSwapRequest(rawRequest) {
       const id = rawRequest?.ID ?? rawRequest?.id ?? rawRequest?.swapShiftRequestID;
+      const requestAssignment =
+        rawRequest?.userShift ||
+        rawRequest?.usershift ||
+        rawRequest?.UserShift ||
+        null;
       const userShiftID = Number(
         rawRequest?.userShiftID ??
+        requestAssignment?.ID ??
         rawRequest?.userShiftId ??
         rawRequest?.user_shift_id
       );
-      const assignment = this.allAssignmentsByID[userShiftID];
-      if (!id || !assignment) return null;
+      const assignment = this.allAssignmentsByID[userShiftID] || requestAssignment || null;
+      if (!id || !userShiftID) return null;
 
-      const shift = this.shiftsByID[assignment.shiftID];
-      if (!shift) return null;
+      const shiftID = assignment?.shiftID ?? rawRequest?.shiftID ?? rawRequest?.shiftId ?? null;
+      const shift = this.shiftsByID[shiftID] || null;
 
-      const authorID = this.normalizeUserID(assignment.userID);
+      const authorID = this.normalizeUserID(
+        assignment?.userID ?? rawRequest?.userID ?? rawRequest?.authorID ?? this.currentUserID
+      );
       const author = this.departmentWorkersByID[authorID];
-      const position = this.positionsByID[shift.positionID] || {};
+      const positionID = shift?.positionID ?? rawRequest?.positionID ?? null;
+      const position = this.positionsByID[positionID] || {};
 
       return {
         id,
@@ -569,14 +578,14 @@ export default {
         backendStatus: rawRequest?.status || "Pending",
         status: this.normalizeRequestStatus(rawRequest?.status),
         userShiftID,
-        shiftID: shift.ID,
-        shiftDate: shift.shift_date,
-        startTime: this.toHHMM(shift.start_time),
-        endTime: this.toHHMM(shift.end_time),
-        positionID: shift.positionID || null,
-        positionTitle: position.title || `Shift ${shift.ID}`,
+        shiftID: shift?.ID ?? shiftID ?? null,
+        shiftDate: shift?.shift_date || rawRequest?.shiftDate || "",
+        startTime: this.toHHMM(shift?.start_time || rawRequest?.startTime || ""),
+        endTime: this.toHHMM(shift?.end_time || rawRequest?.endTime || ""),
+        positionID: positionID || null,
+        positionTitle: position.title || (shift?.ID ? `Shift ${shift.ID}` : "Shift Request"),
         authorID,
-        authorName: this.getDisplayName(author, authorID),
+        authorName: this.getDisplayName(author, authorID || this.currentUserID),
         reason: rawRequest?.reason || "",
         acceptedByID: null,
         acceptedByName: "",
@@ -736,12 +745,12 @@ export default {
           status: "Pending",
           reason: String(this.newRequest.reason || "").trim(),
         });
-        await this.loadTradeRequests();
+        await this.loadTradeBoardData();
         this.newRequest = {
           shiftKey: null,
           reason: "",
         };
-        this.activeFilter = "mine";
+        this.activeFilter = "open";
         this.showSnackbar("Trade request posted.");
       } catch (error) {
         console.error("Could not create swap shift request:", error?.response?.data || error);
