@@ -6,9 +6,11 @@ import Utils from "./config/utils";
 import departmentUsersServices from "./services/departmentUsersServices.js";
 import settingsServices from "./services/settingsServices.js";
 import settingsValuesServices from "./services/settingsValuesServices.js";
+import { getUserID, normalizeRole, withEffectiveRole } from "./services/userRoleResolver.js";
 
 import ManagerNavBar from "./components/ManagerNavBar.vue"; 
 import WorkerNavBar from "./components/WorkerNavBar.vue"; 
+import AdminNavBar from "./components/AdminNavBar.vue";
 
 const MANAGER_DARK_MODE_STORAGE_KEY = "manager_dark_mode_enabled";
 const WORKER_DARK_MODE_STORAGE_KEY = "worker_dark_mode_enabled";
@@ -17,10 +19,11 @@ const route = useRoute();
 const theme = useTheme();
 const appThemeName = ref("myCustomLightTheme");
 
-const getUserRole = (rawUser) => String(rawUser?.role || "").trim().toLowerCase();
+const getUserRole = (rawUser) => normalizeRole(rawUser?.role);
 
 window.updateUserState = () => {
   user.value = Utils.getStore("user");
+  refreshEffectiveUserRole();
 };
 
 const showNav = computed(() => {
@@ -29,13 +32,24 @@ const showNav = computed(() => {
 
 const isManagerRoute = computed(() => route.path.startsWith("/manager"));
 const isWorkerRoute = computed(() => route.path.startsWith("/worker"));
+const isAdminRoute = computed(() => route.path.startsWith("/admin"));
 const isDarkAppMode = computed(
   () => appThemeName.value === "myCustomDarkTheme" && (isManagerRoute.value || isWorkerRoute.value)
 );
 
 const normalizeID = (raw) => {
-  const id = Number(raw);
-  return Number.isFinite(id) && id > 0 ? id : null;
+  return getUserID({ ID: raw });
+};
+
+const refreshEffectiveUserRole = async () => {
+  const currentUser = user.value;
+  if (!currentUser) return;
+
+  const nextUser = await withEffectiveRole(currentUser);
+  if (getUserRole(nextUser) === getUserRole(currentUser)) return;
+
+  user.value = nextUser;
+  Utils.setStore("user", nextUser);
 };
 
 const getManagerDepartmentID = async () => {
@@ -158,6 +172,7 @@ const handleWorkerThemeUpdate = () => {
 };
 
 onMounted(() => {
+  refreshEffectiveUserRole();
   applyAppThemePreference();
   window.addEventListener("storage", handleStorageUpdate);
   window.addEventListener("manager-theme-updated", handleManagerThemeUpdate);
@@ -176,13 +191,22 @@ watch(
     applyAppThemePreference();
   }
 );
+
+watch(
+  () => normalizeID(user.value?.ID ?? user.value?.id ?? user.value?.userID),
+  () => {
+    refreshEffectiveUserRole();
+  }
+);
 </script>
 
 <template>
   <v-app :theme="appThemeName" :class="{ 'dark-app-mode': isDarkAppMode }">
     <template v-if="showNav && user">
       
-      <ManagerNavBar v-if="getUserRole(user) === 'manager'" />
+      <AdminNavBar v-if="getUserRole(user) === 'admin' && isAdminRoute" />
+      
+      <ManagerNavBar v-else-if="getUserRole(user) === 'manager'" />
       
       <WorkerNavBar v-else-if="getUserRole(user) === 'worker'" :user="user" />
 

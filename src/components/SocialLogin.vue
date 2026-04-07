@@ -3,6 +3,7 @@ import { ref, onMounted } from "vue";
 import AuthServices from "../services/authServices";
 import Utils from "../config/utils.js";
 import { useRouter } from "vue-router";
+import { normalizeRole, withEffectiveRole } from "../services/userRoleResolver.js";
 
 const router = useRouter();
 const user = ref({});
@@ -35,7 +36,7 @@ const handleCredentialResponse = async (response) => {
   try {
     const res = await AuthServices.login(payload);
     
-    user.value = res;
+    user.value = await withEffectiveRole(res);
     console.log("Logged in user:", user.value);
 
     Utils.setStore("user", user.value);
@@ -47,13 +48,14 @@ const handleCredentialResponse = async (response) => {
     if (window.updateUserState) window.updateUserState();
 
 
-    if (user.value.role === 'Admin') {
-          router.push({ name: "adminDashboard" });
-        } else if (user.value.role === 'Manager') {
-          router.push({ name: "managerDashboard" }); 
-        } else {
-          router.push({ name: "workerDashboard" });
-        }
+    const role = normalizeRole(user.value.role);
+    if (role === "admin") {
+      router.push({ name: "adminDashboard" });
+    } else if (role === "manager") {
+      router.push({ name: "managerDashboard" });
+    } else {
+      router.push({ name: "workerDashboard" });
+    }
 
   } catch (error) {
     console.error("Login error:", error);

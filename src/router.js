@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 
 import Login from "./views/Login.vue";
-import Signup from "./views/Signup.vue";
 
 import WorkerDashboard from "./views/WorkerDashBoard.vue";
 import WorkerClockInOut from "./views/WorkerClockInOut.vue";
@@ -17,7 +16,7 @@ import WorkerTradeBoard from "./views/WorkerTradeBoard.vue";
 import WorkerAnnouncements from "./views/WorkerAnnouncements.vue";
 import Budget from "./views/Budget.vue";
 import ManagerAnnouncements from "./views/ManagerAnnouncements.vue";
-// import AdminDashboard from "./views/AdminDashBoard.vue";
+import AdminDashboard from "./views/AdminDashBoard.vue";
 
 // import WorkerProfile from "./views/WorkerProfile.vue";
 
@@ -33,10 +32,17 @@ const router = createRouter({
     {
       path: "/signup",
       name: "signup",
-      component: Signup,
+      redirect: "/login",
     },
 
     // Manager Routes
+    {
+      path: "/admin",
+      name: "adminDashboard",
+      component: AdminDashboard,
+      meta: { role: "Admin" },
+    },
+
     {
       path: "/manager",
       name: "managerDashboard",

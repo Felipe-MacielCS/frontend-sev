@@ -2,35 +2,60 @@
   <v-container fluid class="pa-6 bg-grey-lighten-4" style="min-height: 100vh;">
     <v-row>
       <v-col cols="12" md="3">
-        <v-card class="mb-4 pa-4 bg-grey-lighten-3" elevation="1">
-          <h3 class="text-subtitle-1 font-weight-bold mb-3">Official Schedule</h3>
+        <v-card class="mb-4 pa-4 bg-grey-lighten-3 workspace-rail" elevation="1">
+          <div class="text-overline rail-eyebrow mb-2">Worker Schedule</div>
+          <div class="text-subtitle-1 font-weight-bold mb-2">Current Schedule</div>
           <div v-if="officialSchedule" class="text-body-2">
-            <div><b>Name:</b> {{ officialSchedule.name || "Official Schedule" }}</div>
-            <div><b>Range:</b> {{ officialSchedule.start_date }} to {{ officialSchedule.end_date }}</div>
+            <v-sheet rounded="lg" class="pa-3 schedule-summary-sheet" border>
+              <div class="text-subtitle-2 font-weight-bold mb-1">
+                {{ officialSchedule.name || "Current Schedule" }}
+              </div>
+              <div class="text-caption text-medium-emphasis mb-2">
+                {{ officialSchedule.start_date }} to {{ officialSchedule.end_date }}
+              </div>
+            </v-sheet>
           </div>
           <div v-else class="text-body-2 text-medium-emphasis">
             No official schedule is available for your department.
           </div>
         </v-card>
 
-        <v-card class="mb-4 pa-4 bg-grey-lighten-3" elevation="1">
-          <h3 class="text-subtitle-1 font-weight-bold mb-3">View Filter</h3>
+        <v-card class="mb-4 pa-4 bg-grey-lighten-3 browser-card" elevation="1">
+          <div class="d-flex align-center justify-space-between mb-3">
+            <div>
+              <div class="text-subtitle-1 font-weight-bold">View Filter</div>
+              <div class="text-caption text-medium-emphasis">Choose whose shifts you want to see.</div>
+            </div>
+            <v-chip size="small" variant="tonal" color="primary">{{ workerFilterItems.length }}</v-chip>
+          </div>
           <v-select
             v-model="selectedViewFilter"
             :items="workerFilterItems"
             item-title="label"
             item-value="value"
             label="Show"
-            variant="solo"
+            variant="outlined"
             density="compact"
             hide-details
+            :menu-props="{ maxHeight: 280 }"
           />
         </v-card>
 
-        <v-card class="pa-4 bg-grey-lighten-3" elevation="1">
-          <h3 class="text-subtitle-1 font-weight-bold mb-3">Alerts</h3>
+        <v-card class="pa-4 bg-grey-lighten-3 browser-card" elevation="1">
+          <div class="d-flex align-center justify-space-between mb-3">
+            <h3 class="text-subtitle-1 font-weight-bold">Schedule Snapshot</h3>
+            <v-icon color="primary">mdi-calendar-check-outline</v-icon>
+          </div>
 
           <div class="d-flex align-center justify-space-between mb-2">
+            <div class="d-flex align-center">
+              <v-icon color="green-darken-2" size="small" class="mr-2">mdi-circle</v-icon>
+              <span class="text-body-2">My Shifts</span>
+            </div>
+            <span class="font-weight-bold text-body-2">{{ myShiftCount }}</span>
+          </div>
+
+          <div class="d-flex align-center justify-space-between">
             <div class="d-flex align-center">
               <v-icon color="blue-darken-1" size="small" class="mr-2">mdi-circle</v-icon>
               <span class="text-body-2">{{ filterSummaryLabel }}</span>
@@ -41,16 +66,42 @@
       </v-col>
 
       <v-col cols="12" md="9">
-        <v-card elevation="2" class="pa-2 bg-white rounded-lg">
-          <Calendar
-            ref="workerCalendar"
-            :events="teamShifts"
-            initialView="timeGridWeek"
-            :isEditable="false"
-            :isSelectable="false"
-            :height="760"
-            :contentHeight="700"
-          />
+        <v-card elevation="2" class="pa-3 bg-white rounded-lg workspace-shell">
+          <div class="workspace-header mb-3">
+            <div class="d-flex align-center justify-space-between flex-wrap ga-3">
+              <div>
+                <div class="text-overline workspace-kicker">Schedule</div>
+                <div class="text-h5 font-weight-bold">{{ currentCalendarTitle }}</div>
+                <div v-if="officialSchedule" class="text-body-2 text-medium-emphasis">
+                  {{ officialSchedule.start_date }} to {{ officialSchedule.end_date }}
+                </div>
+              </div>
+
+              <div class="d-flex align-center flex-wrap justify-end ga-2">
+                <v-chip color="primary" variant="tonal" size="small">
+                  {{ filterSummaryLabel }}
+                </v-chip>
+              </div>
+            </div>
+
+            <div class="d-flex align-center justify-space-between flex-wrap ga-2 mt-3">
+              <div class="text-caption text-medium-emphasis">
+                View your assigned shifts and team coverage in the current official schedule.
+              </div>
+            </div>
+          </div>
+
+          <div class="calendar-frame">
+            <Calendar
+              ref="workerCalendar"
+              :events="teamShifts"
+              initialView="timeGridWeek"
+              :isEditable="false"
+              :isSelectable="false"
+              :height="760"
+              :contentHeight="700"
+            />
+          </div>
         </v-card>
       </v-col>
     </v-row>
@@ -102,6 +153,16 @@ export default {
 
       const selectedWorker = this.departmentWorkersByID[Number(this.selectedViewFilter)];
       return selectedWorker?.name ? `${selectedWorker.name}'s Shifts` : "Assigned Shifts";
+    },
+    currentCalendarTitle() {
+      if (!this.officialSchedule) return "No official schedule selected";
+      return this.officialSchedule.name || "Official Schedule";
+    },
+    myShiftCount() {
+      return this.officialShifts.reduce((count, shift) => {
+        const assignments = this.officialAssignmentsByShiftID[shift.ID] || [];
+        return count + assignments.filter((assignment) => Number(assignment.userID) === Number(this.currentUserID)).length;
+      }, 0);
     },
     teamShifts() {
       const selectedWorkerID =
@@ -247,3 +308,37 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.workspace-rail {
+  position: sticky;
+  top: 92px;
+}
+
+.rail-eyebrow,
+.workspace-kicker {
+  letter-spacing: 0.12em;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+}
+
+.browser-card {
+  border-radius: 18px;
+}
+
+.schedule-summary-sheet {
+  background: linear-gradient(180deg, rgba(128, 22, 43, 0.05) 0%, rgba(128, 22, 43, 0.01) 100%);
+}
+
+.workspace-shell {
+  border-radius: 24px;
+}
+
+.workspace-header {
+  padding: 8px 8px 16px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.calendar-frame {
+  padding: 4px;
+}
+</style>
