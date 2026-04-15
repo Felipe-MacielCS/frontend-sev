@@ -8,7 +8,7 @@
               <div class="text-h5 font-weight-bold">Worker Trade Board</div>
             </div>
             <v-chip color="primary" variant="tonal">
-              {{ openPostCount }} Open
+              {{ openPostCount }} Active
             </v-chip>
           </v-card-title>
 
@@ -168,11 +168,25 @@
                     </div>
 
                     <div
-                      v-if="post.acceptedByName"
+                      v-if="post.status === 'pending_approval' && post.responseCount"
                       class="text-body-2 text-medium-emphasis mb-3"
                     >
-                      Accepted by <strong>{{ post.acceptedByName }}</strong>
-                      on {{ formatDateTime(post.acceptedAt) }}
+                      {{ pendingApprovalSummary(post) }}
+                    </div>
+
+                    <div
+                      v-else-if="post.approvedResponderName"
+                      class="text-body-2 text-medium-emphasis mb-3"
+                    >
+                      Approved for <strong>{{ post.approvedResponderName }}</strong>
+                      on {{ formatDateTime(post.approvedAt || post.updatedAt) }}
+                    </div>
+
+                    <div
+                      v-if="hasCurrentUserResponded(post) && post.status === 'pending_approval'"
+                      class="text-body-2 text-warning-darken-2 mb-3"
+                    >
+                      You accepted this trade. It is waiting for manager approval.
                     </div>
 
                     <div class="d-flex flex-wrap ga-2">
@@ -182,11 +196,11 @@
                         prepend-icon="mdi-check"
                         @click="acceptTradeRequest(post)"
                       >
-                        Accept Request
+                        Accept For Approval
                       </v-btn>
 
                       <v-btn
-                        v-if="isOwnPost(post) && post.status === 'open'"
+                        v-if="isOwnPost(post) && ['open', 'pending_approval'].includes(post.status)"
                         color="error"
                         variant="outlined"
                         prepend-icon="mdi-close"
@@ -259,6 +273,7 @@ export default {
       },
       boardFilters: [
         { label: "Open", value: "open" },
+        { label: "Awaiting Approval", value: "pending_approval" },
         { label: "All", value: "all" },
         { label: "Mine", value: "mine" },
         { label: "Accepted", value: "accepted" },
@@ -321,7 +336,10 @@ export default {
           return Number(post.departmentID) === Number(this.departmentID);
         })
         .filter((post) => {
-          if (this.activeFilter === "open") return post.status === "open";
+          if (this.activeFilter === "open") {
+            return post.status === "open" || post.status === "pending_approval";
+          }
+          if (this.activeFilter === "pending_approval") return post.status === "pending_approval";
           if (this.activeFilter === "mine") return Number(post.authorID) === Number(this.currentUserID);
           if (this.activeFilter === "accepted") return post.status === "accepted";
           return true;
@@ -344,7 +362,7 @@ export default {
         : scopedPosts;
 
       return searchedPosts.sort((a, b) => {
-        const order = { open: 0, accepted: 1, cancelled: 2 };
+        const order = { open: 0, pending_approval: 1, accepted: 2, cancelled: 3 };
         const statusCompare = (order[a.status] ?? 9) - (order[b.status] ?? 9);
         if (statusCompare !== 0) return statusCompare;
         return new Date(b.createdAt) - new Date(a.createdAt);
@@ -370,7 +388,7 @@ export default {
     openPostCount() {
       return this.tradePosts.filter(
         (post) =>
-          post.status === "open" &&
+          (post.status === "open" || post.status === "pending_approval") &&
           (!this.departmentID || Number(post.departmentID) === Number(this.departmentID))
       ).length;
     },
@@ -525,15 +543,26 @@ export default {
     isOwnPost(post) {
       return Number(post.authorID) === Number(this.currentUserID);
     },
+    hasCurrentUserResponded(post) {
+      return (post.responses || []).some(
+        (response) => Number(response.responderUserID) === Number(this.currentUserID)
+      );
+    },
     canAcceptPost(post) {
-      return post.status === "open" && !this.isOwnPost(post);
+      return (
+        ["open", "pending_approval"].includes(post.status) &&
+        !this.isOwnPost(post) &&
+        !this.hasCurrentUserResponded(post)
+      );
     },
     statusColor(status) {
+      if (status === "pending_approval") return "warning";
       if (status === "accepted") return "success";
       if (status === "cancelled") return "grey";
       return "primary";
     },
     statusLabel(status) {
+      if (status === "pending_approval") return "Awaiting Approval";
       if (status === "accepted") return "Accepted";
       if (status === "cancelled") return "Cancelled";
       return "Open";
@@ -541,10 +570,53 @@ export default {
     normalizeRequestStatus(value) {
       const normalized = String(value || "").trim().toLowerCase();
       if (normalized === "accepted" || normalized === "approved") return "accepted";
+      if (
+        normalized === "pending approval" ||
+        normalized === "pending_approval" ||
+        normalized === "needs approval"
+      ) {
+        return "pending_approval";
+      }
       if (normalized === "cancelled" || normalized === "canceled" || normalized === "denied") {
         return "cancelled";
       }
       return "open";
+    },
+    normalizeResponse(rawResponse) {
+      const responderID = this.normalizeUserID(
+        rawResponse?.responderUserID ??
+          rawResponse?.responderUserId ??
+          rawResponse?.userID ??
+          rawResponse?.userId ??
+          rawResponse?.responder?.ID ??
+          rawResponse?.responder?.id
+      );
+      const responder =
+        rawResponse?.responder ||
+        (responderID ? this.departmentWorkersByID[responderID] : null) ||
+        null;
+
+      return {
+        id: rawResponse?.ID ?? rawResponse?.id ?? null,
+        responderUserID: responderID,
+        responderName: this.getDisplayName(responder, responderID),
+        status: String(rawResponse?.status || "Pending"),
+        respondedAt:
+          rawResponse?.createdAt ||
+          rawResponse?.created_at ||
+          rawResponse?.updatedAt ||
+          rawResponse?.updated_at ||
+          null,
+      };
+    },
+    pendingApprovalSummary(post) {
+      if (!post.responseCount) return "Waiting for workers to accept this trade request.";
+
+      if (post.responseCount === 1) {
+        return `Accepted by ${post.firstResponderName} on ${this.formatDateTime(post.firstRespondedAt)}. Waiting for manager approval.`;
+      }
+
+      return `${post.responseCount} workers accepted this trade. ${post.firstResponderName} was first on ${this.formatDateTime(post.firstRespondedAt)}. Waiting for manager approval.`;
     },
     normalizeSwapRequest(rawRequest) {
       const id = rawRequest?.ID ?? rawRequest?.id ?? rawRequest?.swapShiftRequestID;
@@ -571,6 +643,14 @@ export default {
       const author = this.departmentWorkersByID[authorID];
       const positionID = shift?.positionID ?? rawRequest?.positionID ?? null;
       const position = this.positionsByID[positionID] || {};
+      const responses = this.extractArray(rawRequest?.responses || rawRequest?.swapShiftResponses || [], [])
+        .map((response) => this.normalizeResponse(response))
+        .filter((response) => response.responderUserID)
+        .sort((a, b) => new Date(a.respondedAt || 0) - new Date(b.respondedAt || 0));
+      const approvedResponse =
+        responses.find((response) => String(response.status || "").trim().toLowerCase() === "approved") ||
+        null;
+      const firstResponse = responses[0] || null;
 
       return {
         id,
@@ -587,9 +667,14 @@ export default {
         authorID,
         authorName: this.getDisplayName(author, authorID || this.currentUserID),
         reason: rawRequest?.reason || "",
-        acceptedByID: null,
-        acceptedByName: "",
-        acceptedAt: null,
+        responses,
+        responseCount: responses.length,
+        firstResponderID: firstResponse?.responderUserID || null,
+        firstResponderName: firstResponse?.responderName || "",
+        firstRespondedAt: firstResponse?.respondedAt || null,
+        approvedResponderID: approvedResponse?.responderUserID || null,
+        approvedResponderName: approvedResponse?.responderName || "",
+        approvedAt: approvedResponse?.respondedAt || null,
         createdAt:
           rawRequest?.createdAt ||
           rawRequest?.created_at ||
@@ -730,11 +815,11 @@ export default {
         (post) =>
           Number(post.authorID) === Number(this.currentUserID) &&
           Number(post.shiftID) === Number(this.selectedShiftToTrade.shiftID) &&
-          post.status === "open"
+          ["open", "pending_approval"].includes(post.status)
       );
 
       if (alreadyOpen) {
-        this.showSnackbar("You already posted an open request for that shift.", "warning");
+        this.showSnackbar("You already posted an active request for that shift.", "warning");
         return;
       }
 
@@ -765,14 +850,14 @@ export default {
       try {
         await swapShiftRequestServices.update(post.id, { status: "Accepted" });
         await this.loadTradeBoardData();
-        this.showSnackbar("Trade request accepted.");
+        this.showSnackbar("Trade request sent to the manager for approval.");
       } catch (error) {
         console.error("Could not accept swap shift request:", error?.response?.data || error);
         this.showSnackbar("Could not accept trade request.", "error");
       }
     },
     async cancelTradeRequest(post) {
-      if (!this.isOwnPost(post) || post.status !== "open") return;
+      if (!this.isOwnPost(post) || !["open", "pending_approval"].includes(post.status)) return;
 
       try {
         await swapShiftRequestServices.update(post.id, { status: "Cancelled" });
