@@ -32,11 +32,7 @@
               </v-chip>
             </v-chip-group>
 
-            <v-alert
-              v-if="error"
-              type="error"
-              variant="tonal"
-            >
+            <v-alert v-if="error" type="error" variant="tonal">
               {{ error }}
             </v-alert>
           </v-card-text>
@@ -45,11 +41,11 @@
 
       <v-col cols="12" md="8">
         <v-card elevation="2" class="rounded-xl">
-          <v-card-title class="d-flex align-center justify-space-between">
+          <v-card-title class="d-flex align-center justify-space-between ga-3 flex-wrap">
             <div>
               <div class="text-h6 font-weight-bold">Manager Trade Board</div>
               <div class="text-body-2 text-medium-emphasis">
-                Managers can review requests here, but workers still manage their own trades.
+                Review trade requests and assign the shift to any worker or manager in the department.
               </div>
             </div>
             <v-btn variant="text" :loading="loading" @click="loadManagerTradeBoard">
@@ -72,7 +68,7 @@
               type="info"
               variant="tonal"
             >
-              No trade requests found for your department.
+              No trade requests match this manager view.
             </v-alert>
 
             <v-row v-else>
@@ -97,15 +93,114 @@
 
                     <div class="d-flex flex-wrap ga-2 mb-3">
                       <v-chip size="small" variant="outlined">
-                        Worker: {{ post.authorName }}
+                        Posted by {{ post.authorName }}
                       </v-chip>
                       <v-chip size="small" variant="outlined">
                         Posted {{ formatDateTime(post.createdAt) }}
                       </v-chip>
                     </div>
 
-                    <div v-if="post.reason" class="text-body-2 post-note">
+                    <div v-if="post.reason" class="text-body-2 mb-3 post-note">
                       {{ post.reason }}
+                    </div>
+
+                    <div class="candidate-section">
+                      <div class="d-flex align-center justify-space-between ga-3 mb-2 flex-wrap">
+                        <div class="text-subtitle-2 font-weight-bold">
+                          Assignment Decision
+                        </div>
+                        <div
+                          v-if="post.firstResponderName"
+                          class="text-body-2 text-medium-emphasis"
+                        >
+                          First accepted: <strong>{{ post.firstResponderName }}</strong>
+                        </div>
+                      </div>
+
+                      <div class="d-flex flex-wrap ga-3 align-end mb-4">
+                        <v-select
+                          :model-value="selectedCandidateByRequest[post.id] ?? null"
+                          :items="candidateOptions(post)"
+                          item-title="label"
+                          item-value="value"
+                          label="Assign this shift to"
+                          variant="outlined"
+                          density="comfortable"
+                          hide-details
+                          class="candidate-select"
+                          @update:model-value="setSelectedCandidate(post.id, $event)"
+                        />
+
+                        <v-btn
+                          color="primary"
+                          prepend-icon="mdi-account-check"
+                          :disabled="!selectedCandidateByRequest[post.id] || post.status === 'cancelled'"
+                          @click="approveSelectedCandidate(post)"
+                        >
+                          Assign Selected Person
+                        </v-btn>
+                      </div>
+
+                      <v-alert v-if="!post.responses.length" type="info" variant="tonal">
+                        No one has accepted this request yet, but you can still assign any department worker or manager.
+                      </v-alert>
+
+                      <div v-else class="d-flex flex-column ga-3">
+                        <div class="text-body-2 text-medium-emphasis">
+                          Accepted responses are shown below for reference.
+                        </div>
+
+                        <v-card
+                          v-for="response in post.responses"
+                          :key="`${post.id}-${response.responderUserID}`"
+                          variant="tonal"
+                          class="candidate-card"
+                        >
+                          <v-card-text class="py-3">
+                            <div class="d-flex flex-wrap align-center justify-space-between ga-3">
+                              <div>
+                                <div class="text-subtitle-2 font-weight-medium">
+                                  {{ response.responderName }}
+                                </div>
+                                <div class="text-body-2 text-medium-emphasis">
+                                  Accepted {{ formatDateTime(response.respondedAt) }}
+                                </div>
+                              </div>
+
+                              <div class="d-flex flex-wrap ga-2 align-center">
+                                <v-chip
+                                  v-if="post.firstResponderID === response.responderUserID"
+                                  size="small"
+                                  color="info"
+                                  variant="outlined"
+                                >
+                                  First Accepted
+                                </v-chip>
+
+                                <v-chip
+                                  v-if="post.approvedResponderID === response.responderUserID"
+                                  size="small"
+                                  color="success"
+                                  variant="tonal"
+                                >
+                                  Approved
+                                </v-chip>
+
+                                <v-btn
+                                  v-if="canQuickSelectResponse(post, response)"
+                                  color="primary"
+                                  size="small"
+                                  variant="outlined"
+                                  prepend-icon="mdi-cursor-default-click-outline"
+                                  @click="selectResponseCandidate(post, response)"
+                                >
+                                  Select
+                                </v-btn>
+                              </div>
+                            </div>
+                          </v-card-text>
+                        </v-card>
+                      </div>
                     </div>
                   </v-card-text>
                 </v-card>
@@ -115,6 +210,14 @@
         </v-card>
       </v-col>
     </v-row>
+
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+      timeout="3500"
+    >
+      {{ snackbar.message }}
+    </v-snackbar>
   </v-container>
 </template>
 
@@ -134,21 +237,28 @@ export default {
     return {
       loading: false,
       error: "",
+      snackbar: {
+        show: false,
+        message: "",
+        color: "success",
+      },
       currentUser: null,
       currentUserID: null,
       managerDepartmentID: null,
       officialSchedule: null,
-      departmentWorkersByID: {},
+      departmentMembersByID: {},
       positionsByID: {},
       officialShifts: [],
       officialAssignmentsByShiftID: {},
       tradePosts: [],
+      selectedCandidateByRequest: {},
       search: "",
-      activeFilter: "open",
+      activeFilter: "needs_approval",
       boardFilters: [
-        { label: "Open", value: "open" },
+        { label: "Needs Approval", value: "needs_approval" },
         { label: "All", value: "all" },
         { label: "Accepted", value: "accepted" },
+        { label: "Cancelled", value: "cancelled" },
       ],
     };
   },
@@ -170,8 +280,11 @@ export default {
     filteredTradePosts() {
       const term = String(this.search || "").trim().toLowerCase();
       const statusFiltered = this.tradePosts.filter((post) => {
-        if (this.activeFilter === "open") return post.status === "open";
+        if (this.activeFilter === "needs_approval") {
+          return post.status === "pending_approval" || post.status === "open";
+        }
         if (this.activeFilter === "accepted") return post.status === "accepted";
+        if (this.activeFilter === "cancelled") return post.status === "cancelled";
         return true;
       });
 
@@ -184,6 +297,7 @@ export default {
               post.shiftDate,
               post.startTime,
               post.endTime,
+              ...post.responses.map((response) => response.responderName),
             ]
               .join(" ")
               .toLowerCase()
@@ -191,7 +305,12 @@ export default {
           )
         : statusFiltered;
 
-      return searched.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      return searched.sort((a, b) => {
+        const order = { pending_approval: 0, open: 1, accepted: 2, cancelled: 3 };
+        const statusCompare = (order[a.status] ?? 9) - (order[b.status] ?? 9);
+        if (statusCompare !== 0) return statusCompare;
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      });
     },
     visiblePosts() {
       return this.filteredTradePosts;
@@ -205,6 +324,11 @@ export default {
     await this.loadManagerTradeBoard();
   },
   methods: {
+    showSnackbar(message, color = "success") {
+      this.snackbar.message = message;
+      this.snackbar.color = color;
+      this.snackbar.show = true;
+    },
     getCurrentUser() {
       const stored = Utils.getStore("user");
       return stored?.user ?? stored ?? null;
@@ -228,6 +352,10 @@ export default {
     getDisplayName(user, fallbackID = "") {
       if (!user) return fallbackID ? `Worker ${fallbackID}` : "Worker";
       if (String(user.name || "").trim()) return String(user.name).trim();
+      const first = String(user.firstName || user.firstname || "").trim();
+      const last = String(user.lastName || user.lastname || "").trim();
+      const fullName = `${first} ${last}`.trim();
+      if (fullName) return fullName;
       const id = this.normalizeUserID(user.userID ?? user.ID ?? user.id ?? fallbackID);
       return id ? `Worker ${id}` : "Worker";
     },
@@ -264,11 +392,13 @@ export default {
       }).format(dateObj);
     },
     statusColor(status) {
+      if (status === "pending_approval") return "warning";
       if (status === "accepted") return "success";
       if (status === "cancelled") return "grey";
       return "primary";
     },
     statusLabel(status) {
+      if (status === "pending_approval") return "Awaiting Approval";
       if (status === "accepted") return "Accepted";
       if (status === "cancelled") return "Cancelled";
       return "Open";
@@ -276,47 +406,135 @@ export default {
     normalizeRequestStatus(value) {
       const normalized = String(value || "").trim().toLowerCase();
       if (normalized === "accepted" || normalized === "approved") return "accepted";
+      if (
+        normalized === "pending approval" ||
+        normalized === "pending_approval" ||
+        normalized === "needs approval"
+      ) {
+        return "pending_approval";
+      }
       if (normalized === "cancelled" || normalized === "canceled" || normalized === "denied") {
         return "cancelled";
       }
       return "open";
     },
+    normalizeResponse(rawResponse) {
+      const responderID = this.normalizeUserID(
+        rawResponse?.responderUserID ??
+          rawResponse?.responderUserId ??
+          rawResponse?.userID ??
+          rawResponse?.userId ??
+          rawResponse?.responder?.ID ??
+          rawResponse?.responder?.id
+      );
+      const responder =
+        rawResponse?.responder ||
+        (responderID ? this.departmentMembersByID[responderID] : null) ||
+        null;
+
+      return {
+        id: rawResponse?.ID ?? rawResponse?.id ?? null,
+        responderUserID: responderID,
+        responderName: this.getDisplayName(responder, responderID),
+        responderRole: String(responder?.departmentRole || responder?.role || "").trim(),
+        status: String(rawResponse?.status || "Pending"),
+        respondedAt:
+          rawResponse?.createdAt ||
+          rawResponse?.created_at ||
+          rawResponse?.updatedAt ||
+          rawResponse?.updated_at ||
+          null,
+      };
+    },
     normalizeSwapRequest(rawRequest) {
       const id = rawRequest?.ID ?? rawRequest?.id ?? rawRequest?.swapShiftRequestID;
+      const requestAssignment =
+        rawRequest?.userShift ||
+        rawRequest?.usershift ||
+        rawRequest?.UserShift ||
+        null;
       const userShiftID = Number(
         rawRequest?.userShiftID ??
-        rawRequest?.userShiftId ??
-        rawRequest?.user_shift_id
+          requestAssignment?.ID ??
+          rawRequest?.userShiftId ??
+          rawRequest?.user_shift_id
       );
-      const assignment = this.allAssignmentsByID[userShiftID];
-      if (!id || !assignment) return null;
+      const assignment = this.allAssignmentsByID[userShiftID] || requestAssignment || null;
+      if (!id || !userShiftID) return null;
 
-      const shift = this.shiftsByID[assignment.shiftID];
-      if (!shift) return null;
+      const shiftID = assignment?.shiftID ?? rawRequest?.shiftID ?? rawRequest?.shiftId ?? null;
+      const shift = this.shiftsByID[shiftID] || null;
 
-      const authorID = this.normalizeUserID(assignment.userID);
-      const author = this.departmentWorkersByID[authorID];
-      const position = this.positionsByID[shift.positionID] || {};
+      const authorID = this.normalizeUserID(
+        assignment?.userID ?? rawRequest?.userID ?? rawRequest?.authorID ?? null
+      );
+      const author = this.departmentMembersByID[authorID];
+      const positionID = shift?.positionID ?? rawRequest?.positionID ?? null;
+      const position = this.positionsByID[positionID] || {};
+      const responses = this.extractArray(rawRequest?.responses || rawRequest?.swapShiftResponses || [], [])
+        .map((response) => this.normalizeResponse(response))
+        .filter((response) => response.responderUserID)
+        .sort((a, b) => new Date(a.respondedAt || 0) - new Date(b.respondedAt || 0));
+      const approvedResponse =
+        responses.find((response) => String(response.status || "").trim().toLowerCase() === "approved") ||
+        null;
+      const firstResponse = responses[0] || null;
 
       return {
         id,
         status: this.normalizeRequestStatus(rawRequest?.status),
         userShiftID,
-        shiftID: shift.ID,
-        shiftDate: shift.shift_date,
-        startTime: this.toHHMM(shift.start_time),
-        endTime: this.toHHMM(shift.end_time),
-        positionID: shift.positionID || null,
-        positionTitle: position.title || `Shift ${shift.ID}`,
+        shiftID: shift?.ID ?? shiftID ?? null,
+        shiftDate: shift?.shift_date || rawRequest?.shiftDate || "",
+        startTime: this.toHHMM(shift?.start_time || rawRequest?.startTime || ""),
+        endTime: this.toHHMM(shift?.end_time || rawRequest?.endTime || ""),
+        positionID: positionID || null,
+        positionTitle: position.title || (shift?.ID ? `Shift ${shift.ID}` : "Shift Request"),
         authorID,
         authorName: this.getDisplayName(author, authorID),
         reason: rawRequest?.reason || "",
+        responses,
+        responseCount: responses.length,
+        firstResponderID: firstResponse?.responderUserID || null,
+        firstResponderName: firstResponse?.responderName || "",
+        firstRespondedAt: firstResponse?.respondedAt || null,
+        approvedResponderID: approvedResponse?.responderUserID || null,
+        approvedResponderName: approvedResponse?.responderName || "",
+        approvedAt: approvedResponse?.respondedAt || null,
         createdAt:
           rawRequest?.createdAt ||
           rawRequest?.created_at ||
           rawRequest?.updatedAt ||
           new Date().toISOString(),
       };
+    },
+    candidateOptions(post) {
+      return Object.values(this.departmentMembersByID)
+        .filter((member) => Number(member.ID) !== Number(post.authorID))
+        .map((member) => {
+          const departmentRole = String(member.departmentRole || member.role || "Worker").trim();
+          return {
+            value: member.ID,
+            label: `${this.getDisplayName(member, member.ID)} (${departmentRole})`,
+          };
+        })
+        .sort((a, b) => a.label.localeCompare(b.label));
+    },
+    setSelectedCandidate(requestID, userID) {
+      this.selectedCandidateByRequest = {
+        ...this.selectedCandidateByRequest,
+        [requestID]: userID ? Number(userID) : null,
+      };
+    },
+    selectResponseCandidate(post, response) {
+      this.setSelectedCandidate(post.id, response.responderUserID);
+    },
+    canQuickSelectResponse(post, response) {
+      return (
+        post.status !== "accepted" &&
+        post.status !== "cancelled" &&
+        Number(this.selectedCandidateByRequest[post.id] ?? 0) !== Number(response.responderUserID)
+      );
     },
     async getManagerDepartmentID() {
       if (!this.currentUserID) return null;
@@ -346,26 +564,46 @@ export default {
         ]);
 
         const departmentLinks = this.extractArray(departmentLinksRes, ["departmentusers"]);
-        const workerIDs = departmentLinks
-          .filter((link) => String(link.role || "").trim().toLowerCase() === "worker")
+        const eligibleLinks = departmentLinks.filter((link) =>
+          ["worker", "manager"].includes(String(link.role || "").trim().toLowerCase())
+        );
+        const memberIDs = eligibleLinks
           .map((link) => Number(link.userID ?? link.userId ?? link.UserID))
           .filter((id) => Number.isFinite(id) && id > 0);
 
-        const workerResults = await Promise.allSettled(workerIDs.map((id) => userServices.get(id)));
-        this.departmentWorkersByID = workerResults.reduce((acc, result, index) => {
-          const fallbackID = workerIDs[index];
+        const memberResults = await Promise.allSettled(memberIDs.map((id) => userServices.get(id)));
+        this.departmentMembersByID = memberResults.reduce((acc, result, index) => {
+          const fallbackID = memberIDs[index];
+          const fallbackLink = eligibleLinks[index];
+          const departmentRole = String(fallbackLink?.role || "").trim() || "Worker";
           if (result.status !== "fulfilled") {
-            acc[fallbackID] = { ID: fallbackID, userID: fallbackID, name: `Worker ${fallbackID}` };
+            acc[fallbackID] = {
+              ID: fallbackID,
+              userID: fallbackID,
+              name: `User ${fallbackID}`,
+              role: departmentRole,
+              departmentRole,
+            };
             return acc;
           }
-          const worker = result.value;
-          const id = this.normalizeUserID(worker?.ID ?? worker?.id ?? worker?.userID);
-          if (id) acc[id] = { ...worker, ID: id };
+          const member = result.value;
+          const id = this.normalizeUserID(member?.ID ?? member?.id ?? member?.userID);
+          if (id) {
+            acc[id] = {
+              ...member,
+              ID: id,
+              role: member?.role || departmentRole,
+              departmentRole,
+            };
+          }
           return acc;
         }, {});
 
         try {
-          const positionsRes = await positionServices.getAll({ departmentID: this.managerDepartmentID, limit: 200 });
+          const positionsRes = await positionServices.getAll({
+            departmentID: this.managerDepartmentID,
+            limit: 200,
+          });
           const positions = this.extractArray(positionsRes, ["positions"]);
           this.positionsByID = positions.reduce((acc, position) => {
             const id = position.positionID ?? position.ID;
@@ -408,13 +646,41 @@ export default {
         ]);
         this.tradePosts = requests
           .map((request) => this.normalizeSwapRequest(request))
-          .filter(Boolean);
+          .filter((post) => post && this.departmentMembersByID[post.authorID]);
+        this.selectedCandidateByRequest = this.tradePosts.reduce((acc, post) => {
+          const defaultCandidate =
+            post.approvedResponderID ||
+            post.firstResponderID ||
+            this.candidateOptions(post)[0]?.value ||
+            null;
+          acc[post.id] = defaultCandidate;
+          return acc;
+        }, {});
       } catch (error) {
         console.error("Failed to load manager trade board:", error?.response?.data || error);
         this.error = "Could not load trade requests.";
         this.tradePosts = [];
       } finally {
         this.loading = false;
+      }
+    },
+    async approveSelectedCandidate(post) {
+      const approvedUserID = Number(this.selectedCandidateByRequest[post.id]);
+      if (!approvedUserID || post.status === "cancelled") return;
+
+      const selectedMember = this.departmentMembersByID[approvedUserID];
+      const selectedName = this.getDisplayName(selectedMember, approvedUserID);
+
+      try {
+        await swapShiftRequestServices.update(post.id, {
+          status: "Accepted",
+          approvedUserID,
+        });
+        await this.loadManagerTradeBoard();
+        this.showSnackbar(`${selectedName} was assigned to the trade request.`);
+      } catch (error) {
+        console.error("Failed to approve trade response:", error?.response?.data || error);
+        this.showSnackbar("Could not assign that person to the trade request.", "error");
       }
     },
   },
@@ -431,6 +697,20 @@ export default {
 
 .trade-post {
   background: rgba(255, 255, 255, 0.92);
+}
+
+.candidate-section {
+  border-top: 1px solid rgba(114, 21, 26, 0.12);
+  padding-top: 16px;
+}
+
+.candidate-card {
+  background: rgba(114, 21, 26, 0.04);
+}
+
+.candidate-select {
+  min-width: 280px;
+  flex: 1 1 320px;
 }
 
 .post-note {
