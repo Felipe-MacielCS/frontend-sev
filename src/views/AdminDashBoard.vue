@@ -326,7 +326,7 @@ import departmentServices from "../services/departmentServices.js";
 import departmentUsersServices from "../services/departmentUsersServices.js";
 import userServices from "../services/userServices.js";
 
-const DEFAULT_DEPARTMENT_FORM = () => ({
+const DEFAULT_DEPARTMENT = () => ({
   ID: null,
   name: "",
   location: "",
@@ -334,7 +334,7 @@ const DEFAULT_DEPARTMENT_FORM = () => ({
   email: "",
 });
 
-const DEFAULT_USER_FORM = () => ({
+const DEFAULT_USER = () => ({
   isAdmin: false,
   status: "active",
   assignments: [],
@@ -360,7 +360,7 @@ export default {
         open: false,
         saving: false,
         error: "",
-        form: DEFAULT_DEPARTMENT_FORM(),
+        form: DEFAULT_DEPARTMENT(),
       },
       userDialog: {
         open: false,
@@ -368,7 +368,7 @@ export default {
         error: "",
         user: null,
         assignment: null,
-        form: DEFAULT_USER_FORM(),
+        form: DEFAULT_USER(),
       },
       departmentRoleOptions: ["Manager", "Worker"],
     };
@@ -516,7 +516,7 @@ export default {
         open: true,
         saving: false,
         error: "",
-        form: DEFAULT_DEPARTMENT_FORM(),
+        form: DEFAULT_DEPARTMENT(),
       };
     },
     startEditDepartment(department) {
@@ -538,7 +538,7 @@ export default {
         open: false,
         saving: false,
         error: "",
-        form: DEFAULT_DEPARTMENT_FORM(),
+        form: DEFAULT_DEPARTMENT(),
       };
     },
     async saveDepartment() {
@@ -622,7 +622,7 @@ export default {
         error: "",
         user: null,
         assignment: null,
-        form: DEFAULT_USER_FORM(),
+        form: DEFAULT_USER(),
       };
     },
     async saveUser() {

@@ -115,6 +115,8 @@ import shiftServices from "../services/shiftServices.js";
 import userShiftServices from "../services/userShiftServices.js";
 import departmentUsersServices from "../services/departmentUsersServices.js";
 import userServices from "../services/userServices.js";
+import positionServices from "../services/positionServices.js";
+import { getPositionColor } from "../utils/positionColors.js";
 
 export default {
   name: "WorkerDashBoard",
@@ -125,6 +127,7 @@ export default {
       currentUserID: null,
       officialSchedule: null,
       departmentWorkersByID: {},
+      positionsByID: {},
       officialShifts: [],
       officialAssignmentsByShiftID: {},
       selectedViewFilter: "me",
@@ -181,17 +184,24 @@ export default {
 
         return relevantAssignments.map((assignment) => {
           const worker = this.departmentWorkersByID[Number(assignment.userID)];
+          const position = this.positionsByID[shift.positionID];
+          const positionTitle = position?.title || "Shift";
           return {
             id: `${shift.ID}-${assignment.ID}`,
             title:
               this.selectedViewFilter === "all"
-                ? `${worker?.name || "Worker"}`
+                ? `${worker?.name || "Worker"} - ${positionTitle}`
                 : this.selectedViewFilter === "me"
-                  ? "My Shift"
-                  : `${worker?.name || "Worker"}'s Shift`,
+                  ? positionTitle
+                  : `${worker?.name || "Worker"} - ${positionTitle}`,
             start: `${shift.shift_date}T${this.toHHMM(shift.start_time)}:00`,
             end: `${shift.shift_date}T${this.toHHMM(shift.end_time)}:00`,
-            color: Number(assignment.userID) === Number(this.currentUserID) ? "#2e7d32" : "#1565c0",
+            color: getPositionColor(position, shift.positionID),
+            textColor: "#ffffff",
+            extendedProps: {
+              shiftID: shift.ID,
+              positionID: shift.positionID || null,
+            },
           };
         });
       });
@@ -267,6 +277,20 @@ export default {
           return acc;
         }, {});
 
+        const positionsRes = await positionServices.getAll({ departmentID, limit: 200 });
+        const positions = Array.isArray(positionsRes)
+          ? positionsRes
+          : Array.isArray(positionsRes?.positions)
+            ? positionsRes.positions
+            : Array.isArray(positionsRes?.data)
+              ? positionsRes.data
+              : [];
+        this.positionsByID = positions.reduce((acc, position) => {
+          const id = position.positionID ?? position.ID ?? position.id;
+          if (id) acc[id] = position;
+          return acc;
+        }, {});
+
         const scheduleRes = await scheduleServices.getAll({
           departmentID,
           type: "official",
@@ -301,6 +325,7 @@ export default {
         console.error("Failed to load official schedule for worker:", e?.response?.data || e);
         this.officialSchedule = null;
         this.departmentWorkersByID = {};
+        this.positionsByID = {};
         this.officialShifts = [];
         this.officialAssignmentsByShiftID = {};
       }

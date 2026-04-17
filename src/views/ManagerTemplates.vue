@@ -266,6 +266,7 @@ import scheduleServices from "../services/scheduleServices.js";
 import shiftServices from "../services/shiftServices.js";
 import departmentUsersServices from "../services/departmentUsersServices.js";
 import positionServices from "../services/positionServices.js";
+import { getPositionColor } from "../utils/positionColors.js";
 
 export default {
   name: "ManagerTemplates",
@@ -318,6 +319,7 @@ export default {
       snackbar: { show: false, message: "", color: "success" },
     };
   },
+
   computed: {
     templateItems() {
       return this.templates.map((t) => ({ value: t.ID, label: t.name || "Untitled Template" }));
@@ -345,6 +347,7 @@ export default {
     canApplyTemplate() {
       return !!this.selectedTemplateID && !!this.templateApply.anchor_date;
     },
+
     calendarEvents() {
       return this.shifts.map((shift) => {
         const position = this.positionsByID[shift.positionID];
@@ -354,8 +357,9 @@ export default {
           title,
           start: `${shift.shift_date}T${this.toHHMM(shift.start_time)}:00`,
           end: `${shift.shift_date}T${this.toHHMM(shift.end_time)}:00`,
-          color: "#1976d2",
-          extendedProps: { shiftID: shift.ID },
+          color: getPositionColor(position, shift.positionID),
+          textColor: "#ffffff",
+          extendedProps: { shiftID: shift.ID, positionID: shift.positionID || null },
         };
       });
     },
@@ -371,6 +375,7 @@ export default {
       const d = String(date.getDate()).padStart(2, "0");
       return `${y}-${m}-${d}`;
     },
+
     addDays(date, days) {
       const next = new Date(date);
       next.setDate(next.getDate() + days);
@@ -394,6 +399,7 @@ export default {
       const stored = raw ? JSON.parse(raw) : null;
       return stored?.user ?? stored ?? null;
     },
+
     async getManagerDepartmentID() {
       const currentUser = this.getCurrentUser();
       const managerID = currentUser?.ID ?? currentUser?.id ?? currentUser?.userID;
@@ -420,6 +426,7 @@ export default {
           this.error = "No manager department found.";
           return;
         }
+
         await Promise.all([this.loadPositions(), this.loadTemplates()]);
         const routeTemplateID = Number(this.$route?.query?.templateID);
         if (Number.isFinite(routeTemplateID) && this.templates.some((t) => Number(t.ID) === routeTemplateID)) {
@@ -448,6 +455,7 @@ export default {
           : Array.isArray(res?.data)
             ? res.data
             : [];
+            
       this.positionsByID = positions.reduce((acc, p) => {
         const id = p.positionID ?? p.ID;
         if (id) acc[id] = p;

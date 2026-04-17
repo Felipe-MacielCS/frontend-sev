@@ -18,7 +18,7 @@
               {{ currentCalendarScheduleTypeLabel }}
             </v-chip>
             <v-chip size="small" variant="tonal" color="teal">
-              {{ shifts.length }} shifts
+              {{ filteredShifts.length }} shifts
             </v-chip>
             <v-chip size="small" variant="outlined" color="error">
               {{ unassignedShiftCount }} unassigned
@@ -42,7 +42,21 @@
             />
           </v-col>
 
-          <v-col cols="12" md="8" lg="9">
+          <v-col cols="12" md="4" lg="3">
+            <v-select
+              v-model="selectedPositionFilter"
+              label="Position"
+              :items="positionFilterItems"
+              item-title="label"
+              item-value="value"
+              variant="outlined"
+              density="compact"
+              hide-details
+              :menu-props="selectMenuProps"
+            />
+          </v-col>
+
+          <v-col cols="12" md="4" lg="6">
             <div class="d-flex ga-2 flex-wrap justify-start justify-lg-end">
               <v-btn
                 color="primary"
@@ -79,6 +93,15 @@
           <v-btn
             variant="text"
             color="primary"
+            prepend-icon="mdi-calendar-plus"
+            :disabled="!selectedSchedule"
+            @click="openCreateShiftFromButton"
+          >
+            New Shift
+          </v-btn>
+          <v-btn
+            variant="text"
+            color="primary"
             prepend-icon="mdi-file-document-outline"
             to="/manager/templates"
           >
@@ -106,6 +129,7 @@
           :height="760"
           :contentHeight="700"
           :firstDay="managerSettings.schedule_week_starts_monday ? 1 : 0"
+          :slotEventOverlap="false"
           @dates-changed="saveSessionState"
           @time-selected="openCreateShiftModal"
           @shift-clicked="openEditShiftModal"
@@ -346,6 +370,7 @@ import userServices from "../services/userServices.js";
 import positionServices from "../services/positionServices.js";
 import settingsServices from "../services/settingsServices.js";
 import settingsValuesServices from "../services/settingsValuesServices.js";
+import { getPositionColor, UNASSIGNED_SHIFT_COLOR } from "../utils/positionColors.js";
 
 const SESSION_STORAGE_KEY = "manager-schedule-page-state-v1";
 
@@ -385,6 +410,7 @@ export default {
 
       schedules: [],
       selectedScheduleID: null,
+      selectedPositionFilter: "all",
       lastScheduleTabSelectionID: null,
       scheduleEditor: {
         name: "",
@@ -569,6 +595,20 @@ export default {
       return list.map((p) => ({ value: p.positionID || p.ID, label: p.title || `Position ${p.positionID || p.ID}` }));
     },
 
+    positionFilterItems() {
+      return [
+        { value: "all", label: "All Positions" },
+        ...this.positionItems,
+      ];
+    },
+
+    filteredShifts() {
+      if (this.selectedPositionFilter === "all") return this.shifts;
+      return this.shifts.filter(
+        (shift) => String(shift.positionID || "") === String(this.selectedPositionFilter)
+      );
+    },
+
     workerItems() {
       const list = Object.values(this.workersByID);
       return list
@@ -581,7 +621,7 @@ export default {
     },
 
     calendarEvents() {
-      return this.shifts.map((shift) => {
+      return this.filteredShifts.map((shift) => {
         const shiftID = shift.ID;
         const assignments = this.userShiftAssignmentsByShiftID[shiftID] || [];
         const workerNames = assignments
@@ -600,7 +640,10 @@ export default {
             ? `${positionTitle} (${assignedCount}/${required}) - ${workerNames}`
             : `${positionTitle} (0/${required}) - Unassigned`;
 
-        const color = assignedCount >= required ? "#2e7d32" : "#c62828";
+        const color =
+          assignedCount === 0
+            ? UNASSIGNED_SHIFT_COLOR
+            : getPositionColor(position, shift.positionID);
 
         return {
           id: String(shift.ID),
@@ -608,15 +651,18 @@ export default {
           start: `${shift.shift_date}T${this.toHHMM(shift.start_time)}:00`,
           end: `${shift.shift_date}T${this.toHHMM(shift.end_time)}:00`,
           color,
+          borderColor: assignedCount >= required ? color : UNASSIGNED_SHIFT_COLOR,
+          textColor: "#ffffff",
           extendedProps: {
             shiftID: shift.ID,
+            positionID: shift.positionID || null,
           },
         };
       });
     },
 
     unassignedShiftCount() {
-      return this.shifts.filter((shift) => {
+      return this.filteredShifts.filter((shift) => {
         const assigned = (this.userShiftAssignmentsByShiftID[shift.ID] || []).length;
         return assigned < (shift.workers_required || 1);
       }).length;
@@ -655,6 +701,9 @@ export default {
       ) {
         this.lastScheduleTabSelectionID = this.selectedScheduleID;
       }
+      this.saveSessionState();
+    },
+    selectedPositionFilter() {
       this.saveSessionState();
     },
     "templateApply.templateScheduleID"() {
@@ -921,12 +970,13 @@ export default {
 
       const conflictingShift = this.shifts.find((shift) => {
         if (editingShiftID && Number(shift.ID) === Number(editingShiftID)) return false;
+        if (String(shift.positionID || "") !== String(shiftPayload.positionID || "")) return false;
         return this.getShiftOverlapMinutes(shiftPayload, shift) > allowedMinutes;
       });
 
       if (!conflictingShift) return null;
 
-      return `This shift overlaps another shift by more than ${allowedMinutes} minute${allowedMinutes === 1 ? "" : "s"}.`;
+      return `This shift overlaps another shift in the same position`;
     },
 
     readSessionState() {
@@ -946,6 +996,7 @@ export default {
           JSON.stringify({
             activePanel: this.activePanel,
             selectedScheduleID: this.selectedScheduleID,
+            selectedPositionFilter: this.selectedPositionFilter,
             lastScheduleTabSelectionID: this.lastScheduleTabSelectionID,
             templateScheduleID: this.templateApply.templateScheduleID,
             calendarDate:
@@ -978,6 +1029,7 @@ export default {
 
       this.activePanel = "schedules";
       this.selectedScheduleID = state.selectedScheduleID || null;
+      this.selectedPositionFilter = state.selectedPositionFilter || "all";
       this.lastScheduleTabSelectionID = state.lastScheduleTabSelectionID || null;
       this.templateApply = {
         ...this.templateApply,
@@ -1305,6 +1357,13 @@ export default {
         if (id) acc[id] = p;
         return acc;
       }, {});
+
+      if (
+        this.selectedPositionFilter !== "all" &&
+        !this.positionsByID[this.selectedPositionFilter]
+      ) {
+        this.selectedPositionFilter = "all";
+      }
     },
 
     async loadSchedules() {
@@ -1438,19 +1497,11 @@ export default {
       };
     },
 
-    openCreateShiftModal(selection) {
-      if (!this.selectedScheduleID) {
-        this.showMessage("Create or select a schedule first.", "warning");
-        return;
-      }
-
-      const start = new Date(selection.start);
-      const end = new Date(selection.end);
-
+    openCreateShiftForm(start, end) {
       this.shiftDialog.mode = "create";
       this.shiftDialog.shiftID = null;
       this.shiftDialog.form = {
-        shift_date: start.toISOString().slice(0, 10),
+        shift_date: this.toISODate(start),
         start_time: start.toTimeString().slice(0, 5),
         end_time: end.toTimeString().slice(0, 5),
         workers_required: Number(this.managerSettings.default_shift_workers_required) || 1,
@@ -1458,6 +1509,31 @@ export default {
         assignedWorkerIDs: [],
       };
       this.shiftDialog.open = true;
+    },
+
+    openCreateShiftFromButton() {
+      if (!this.selectedScheduleID) {
+        this.showMessage("Create or select a schedule first.", "warning");
+        return;
+      }
+
+      const selectedDate =
+        this.$refs.managerCalendar?.getCurrentDate?.() ||
+        this.currentCalendarSchedule?.start_date ||
+        this.toISODate(new Date());
+      const start = new Date(`${selectedDate}T09:00:00`);
+      const end = new Date(`${selectedDate}T10:00:00`);
+
+      this.openCreateShiftForm(start, end);
+    },
+
+    openCreateShiftModal(selection) {
+      if (!this.selectedScheduleID) {
+        this.showMessage("Create or select a schedule first.", "warning");
+        return;
+      }
+
+      this.openCreateShiftForm(new Date(selection.start), new Date(selection.end));
     },
 
     async openEditShiftModal(event) {
