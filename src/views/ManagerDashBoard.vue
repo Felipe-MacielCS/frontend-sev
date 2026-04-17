@@ -838,7 +838,7 @@ export default {
 
         await this.loadSchedules();
         this.closeGenerateTemplateDialog();
-        this.showMessage("Template generated from schedule.");
+        this.showMessage("Template generated");
       } catch (e) {
         console.error(e);
         this.showMessage(e?.response?.data?.message || e?.message || "Failed to generate template.", "error");
