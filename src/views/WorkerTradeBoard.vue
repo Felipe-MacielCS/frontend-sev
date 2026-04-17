@@ -248,6 +248,7 @@ import departmentUsersServices from "../services/departmentUsersServices.js";
 import userServices from "../services/userServices.js";
 import positionServices from "../services/positionServices.js";
 import swapShiftRequestServices from "../services/swapShiftRequestServices.js";
+import { emitNotificationRefresh } from "../services/notificationSync.js";
 
 export default {
   name: "WorkerTradeBoard",
@@ -830,12 +831,19 @@ export default {
           status: "Pending",
           reason: String(this.newRequest.reason || "").trim(),
         });
-        await this.loadTradeBoardData();
+
+        try {
+          await this.loadTradeRequests();
+        } catch (refreshError) {
+          console.error("Trade request posted, but trade list refresh failed:", refreshError);
+        }
+
         this.newRequest = {
           shiftKey: null,
           reason: "",
         };
         this.activeFilter = "open";
+        emitNotificationRefresh();
         this.showSnackbar("Trade request posted.");
       } catch (error) {
         console.error("Could not create swap shift request:", error?.response?.data || error);
@@ -850,6 +858,7 @@ export default {
       try {
         await swapShiftRequestServices.update(post.id, { status: "Accepted" });
         await this.loadTradeBoardData();
+        emitNotificationRefresh();
         this.showSnackbar("Trade request sent to the manager for approval.");
       } catch (error) {
         console.error("Could not accept swap shift request:", error?.response?.data || error);
@@ -862,6 +871,7 @@ export default {
       try {
         await swapShiftRequestServices.update(post.id, { status: "Cancelled" });
         await this.loadTradeRequests();
+        emitNotificationRefresh();
         this.showSnackbar("Trade request cancelled.");
       } catch (error) {
         console.error("Could not cancel swap shift request:", error?.response?.data || error);
@@ -874,6 +884,7 @@ export default {
       try {
         await swapShiftRequestServices.update(post.id, { status: "Pending" });
         await this.loadTradeRequests();
+        emitNotificationRefresh();
         this.showSnackbar("Trade request reopened.");
       } catch (error) {
         console.error("Could not reopen swap shift request:", error?.response?.data || error);
