@@ -11,7 +11,7 @@
           <div class="d-flex align-center flex-wrap justify-end ga-2">
             <v-chip color="blue" variant="tonal" size="small">Template</v-chip>
             <v-chip size="small" variant="tonal" color="teal">
-              {{ shifts.length }} shifts
+              {{ filteredShifts.length }} shifts
             </v-chip>
           </div>
         </div>
@@ -43,7 +43,21 @@
             />
           </v-col>
 
-          <v-col cols="12" md="4" lg="6">
+          <v-col cols="12" md="4" lg="3">
+            <v-select
+              v-model="selectedPositionFilter"
+              label="Position"
+              :items="positionFilterItems"
+              item-title="label"
+              item-value="value"
+              variant="outlined"
+              density="compact"
+              hide-details
+              :menu-props="selectMenuProps"
+            />
+          </v-col>
+
+          <v-col cols="12" md="12" lg="3">
             <div class="d-flex ga-2 flex-wrap justify-start justify-lg-end">
               <v-btn color="primary" variant="flat" prepend-icon="mdi-plus" @click="createTemplateDialog = true">
                 New
@@ -278,6 +292,7 @@ export default {
       managerDepartmentID: null,
       templates: [],
       selectedTemplateID: null,
+      selectedPositionFilter: "all",
       shifts: [],
       positionsByID: {},
       createTemplateDialog: false,
@@ -336,6 +351,18 @@ export default {
         label: p.title || `Position ${p.positionID || p.ID}`,
       }));
     },
+    positionFilterItems() {
+      return [
+        { value: "all", label: "All Positions" },
+        ...this.positionItems,
+      ];
+    },
+    filteredShifts() {
+      if (this.selectedPositionFilter === "all") return this.shifts;
+      return this.shifts.filter(
+        (shift) => String(shift.positionID || "") === String(this.selectedPositionFilter)
+      );
+    },
     canCreateTemplate() {
       return !!this.managerDepartmentID && !!String(this.newTemplate.name || "").trim();
     },
@@ -349,7 +376,7 @@ export default {
     },
 
     calendarEvents() {
-      return this.shifts.map((shift) => {
+      return this.filteredShifts.map((shift) => {
         const position = this.positionsByID[shift.positionID];
         const title = `${position?.title || "Shift"} (${shift.workers_required || 1} needed)`;
         return {
@@ -461,6 +488,13 @@ export default {
         if (id) acc[id] = p;
         return acc;
       }, {});
+
+      if (
+        this.selectedPositionFilter !== "all" &&
+        !this.positionsByID[this.selectedPositionFilter]
+      ) {
+        this.selectedPositionFilter = "all";
+      }
     },
     async onTemplateSelected() {
       const template = this.selectedTemplate;
