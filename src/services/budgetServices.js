@@ -1,23 +1,22 @@
 import apiClient from "./services.js";
 
 export default {
-  getByDepartment(departmentID) {
-    return apiClient.get(`/budgets/department/${departmentID}`);
+  getWeeklyPayroll(departmentID, weekStart) {
+    return apiClient.get(`/payroll/department/${departmentID}`, {
+      params: { week_start: weekStart },
+    });
   },
 
-  saveDepartmentBudget(departmentID, data) {
-    return apiClient.post(`/budgets/department/${departmentID}`, data);
+  saveOverride(userShiftID, data) {
+    return apiClient.put(`/payroll/override/${userShiftID}`, data);
   },
 
-  addCost(data) {
-    return apiClient.post("/budget-costs", data);
-  },
-
-  updateCost(id, data) {
-    return apiClient.put(`/budget-costs/${id}`, data);
-  },
-
-  deleteCost(id) {
-    return apiClient.delete(`/budget-costs/${id}`);
+  clearOverride(userShiftID, departmentID, weekStart) {
+    return apiClient.delete(`/payroll/override/${userShiftID}`, {
+      params: {
+        departmentID,
+        week_start: weekStart,
+      },
+    });
   },
 };
