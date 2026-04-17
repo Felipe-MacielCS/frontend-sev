@@ -1,105 +1,69 @@
 <template>
   <v-container fluid class="pa-6 bg-grey-lighten-4" style="min-height: 100vh;">
-    <v-row>
-      <v-col cols="12" md="3" lg="3">
-        <v-card class="mb-4 pa-4 bg-grey-lighten-3 workspace-rail" elevation="1">
-          <div class="d-flex align-center justify-space-between mb-4">
-            <div>
-              <div class="text-subtitle-1 font-weight-bold">Schedule Builder</div>
-            </div>
-            <v-btn color="primary" size="small" icon="mdi-plus" @click="createScheduleDialog = true" />
+    <v-card elevation="2" class="pa-4 bg-white rounded-lg workspace-shell">
+      <div class="workspace-header mb-4">
+        <div class="d-flex align-center justify-space-between flex-wrap ga-3 mb-4">
+          <div>
+            <div class="text-overline workspace-kicker">Schedule</div>
+            <div class="text-h5 font-weight-bold">{{ currentCalendarScheduleName }}</div>
           </div>
 
-          <v-btn
-            color="primary"
-            block
-            size="large"
-            class="mb-4 new-schedule-btn"
-            prepend-icon="mdi-plus-circle-outline"
-            @click="createScheduleDialog = true"
-          >
-            New Schedule
-          </v-btn>
-
-          <div class="d-flex flex-column ga-2 workspace-switcher">
-            <v-btn
-              color="primary"
-              :variant="activePanel === 'schedules' ? 'flat' : 'tonal'"
-              block
-              prepend-icon="mdi-calendar-month-outline"
-              @click="activePanel = 'schedules'"
+          <div class="d-flex align-center flex-wrap justify-end ga-2">
+            <v-chip
+              v-if="currentCalendarScheduleTypeLabel"
+              color="blue"
+              variant="tonal"
+              size="small"
             >
-              Schedules
-            </v-btn>
-            <v-btn
-              color="primary"
-              :variant="activePanel === 'templates' ? 'flat' : 'tonal'"
-              block
-              prepend-icon="mdi-file-document-outline"
-              @click="activePanel = 'templates'"
-            >
-              Templates
-            </v-btn>
+              {{ currentCalendarScheduleTypeLabel }}
+            </v-chip>
+            <v-chip size="small" variant="tonal" color="teal">
+              {{ shifts.length }} shifts
+            </v-chip>
+            <v-chip size="small" variant="outlined" color="error">
+              {{ unassignedShiftCount }} unassigned
+            </v-chip>
           </div>
-        </v-card>
+        </div>
 
-        <v-card v-if="activePanel === 'schedules'" class="mb-4 pa-4 bg-grey-lighten-3 browser-card" elevation="1">
-          <div class="d-flex align-center justify-space-between mb-3">
-            <div>
-              <div class="text-subtitle-1 font-weight-bold">Schedules</div>
-              <div class="text-caption text-medium-emphasis">Pick one and work directly in the calendar.</div>
-            </div>
-            <v-chip size="small" variant="tonal" color="primary">{{ scheduleItems.length }}</v-chip>
-          </div>
-
-          <v-select
-            v-model="selectedScheduleID"
-            label="Open Schedule"
-            :items="scheduleItems"
-            item-title="label"
-            item-value="value"
-            variant="outlined"
-            density="compact"
-            hide-details
-            class="mb-3"
-            :menu-props="selectMenuProps"
-            @update:modelValue="onScheduleSelected"
-          />
-
-          <div v-if="selectedSchedule" class="text-body-2">
-            <v-sheet rounded="lg" class="pa-3 mb-3 schedule-summary-sheet" border>
-              <div class="text-subtitle-2 font-weight-bold mb-1">
-                {{ selectedSchedule.name || "Untitled Schedule" }}
-              </div>
-              <div class="text-caption text-medium-emphasis mb-2">
-                {{ selectedSchedule.start_date }} to {{ selectedSchedule.end_date }}
-              </div>
-              <v-chip size="x-small" variant="tonal" color="primary">
-                {{ currentCalendarScheduleTypeLabel }}
-              </v-chip>
-            </v-sheet>
-
-            <v-text-field
-              v-model="scheduleEditor.name"
-              label="Rename Schedule"
+        <v-row dense class="align-end schedule-toolbar">
+          <v-col cols="12" md="4" lg="3">
+            <v-select
+              v-model="selectedScheduleID"
+              label="Open Schedule"
+              :items="scheduleItems"
+              item-title="label"
+              item-value="value"
               variant="outlined"
               density="compact"
               hide-details
-              class="mb-3"
+              :menu-props="selectMenuProps"
+              @update:modelValue="onScheduleSelected"
             />
+          </v-col>
 
-            <div class="d-flex ga-2">
+          <v-col cols="12" md="8" lg="9">
+            <div class="d-flex ga-2 flex-wrap justify-start justify-lg-end">
               <v-btn
-                size="default"
                 color="primary"
                 variant="flat"
-                :loading="isUpdatingSchedule"
-                @click="updateSelectedScheduleMeta"
+                prepend-icon="mdi-plus"
+                @click="openCreateScheduleDialog"
               >
-                Save
+                New
               </v-btn>
               <v-btn
-                size="default"
+                v-if="selectedSchedule"
+                color="primary"
+                variant="tonal"
+                :disabled="selectedSchedule?.type === 'official'"
+                :loading="isUpdatingSchedule"
+                @click="setSelectedScheduleActive"
+              >
+                {{ selectedSchedule?.type === "official" ? "Active" : "Set as Active" }}
+              </v-btn>
+              <v-btn
+                v-if="selectedSchedule"
                 color="error"
                 variant="tonal"
                 :loading="isDeletingSchedule"
@@ -108,225 +72,52 @@
                 Delete
               </v-btn>
             </div>
-          </div>
-          <div v-else class="text-body-2 text-medium-emphasis">
-            No schedule selected.
-          </div>
-        </v-card>
+          </v-col>
+        </v-row>
 
-        <v-card v-if="activePanel === 'templates'" class="mb-4 pa-4 bg-grey-lighten-3 browser-card" elevation="1">
-          <div class="d-flex align-center justify-space-between mb-3">
-            <div>
-              <div class="text-subtitle-1 font-weight-bold">Templates</div>
-              <div class="text-caption text-medium-emphasis">Reusable blueprints for recurring weeks.</div>
-            </div>
-            <v-chip size="small" variant="tonal" color="primary">{{ templateScheduleItems.length }}</v-chip>
-          </div>
-
-          <v-select
-            v-model="templateApply.templateScheduleID"
-            :items="templateScheduleItems"
-            item-title="label"
-            item-value="value"
-            label="Open Template"
-            variant="outlined"
-            density="compact"
-            hide-details
-            class="mb-3"
-            :menu-props="selectMenuProps"
-            @update:modelValue="onTemplateSelected"
-          />
-
-          <v-sheet
-            v-if="templateApply.templateScheduleID && currentCalendarSchedule"
-            rounded="lg"
-            class="pa-3 mb-3 schedule-summary-sheet"
-            border
-          >
-            <div class="text-subtitle-2 font-weight-bold mb-1">
-              {{ currentCalendarSchedule.name || "Untitled Template" }}
-            </div>
-            <div class="text-caption text-medium-emphasis">
-              {{ currentCalendarSchedule.start_date }} to {{ currentCalendarSchedule.end_date }}
-            </div>
-          </v-sheet>
-
-          <v-text-field
-            v-model="templateApply.anchor_date"
-            label="Week Of"
-            type="date"
-            variant="outlined"
-            density="compact"
-            hide-details
-            class="mb-3"
-          />
-
-          <v-select
-            v-model="templateApply.type"
-            :items="editableScheduleTypeOptions"
-            item-title="label"
-            item-value="value"
-            label="Create As"
-            variant="outlined"
-            density="compact"
-            hide-details
-            class="mb-3"
-            :menu-props="selectMenuProps"
-          />
-
-          <v-text-field
-            v-model="templateApply.name"
-            label="New Schedule Name (Optional)"
-            variant="outlined"
-            density="compact"
-            hide-details
-            class="mb-3"
-          />
-
+        <div class="d-flex align-center justify-start flex-wrap ga-2 mt-3">
           <v-btn
+            variant="text"
             color="primary"
-            block
-            :loading="isApplyingTemplate"
-            :disabled="!canApplyTemplate"
-            @click="createFromTemplate"
+            prepend-icon="mdi-file-document-outline"
+            to="/manager/templates"
           >
-            Create From Template
+            Manage Templates
           </v-btn>
-
           <v-btn
-            color="error"
-            variant="tonal"
-            block
-            class="mt-2"
-            :loading="isDeletingTemplate"
-            :disabled="!templateApply.templateScheduleID"
-            @click="deleteSelectedTemplate"
+            variant="text"
+            color="primary"
+            prepend-icon="mdi-content-copy"
+            :disabled="!selectedSchedule"
+            @click="openGenerateTemplateDialog"
           >
-            Delete Template
+            Generate Template
           </v-btn>
-        </v-card>
+        </div>
+      </div>
 
-        <v-card class="pa-4 bg-grey-lighten-3" elevation="1">
-          <div class="d-flex align-center justify-space-between mb-3">
-            <h3 class="text-subtitle-1 font-weight-bold">Schedule Snapshot</h3>
-            <v-icon color="primary">mdi-radar</v-icon>
-          </div>
-
-          <div class="d-flex align-center justify-space-between mb-2">
-            <div class="d-flex align-center">
-              <v-icon color="red-darken-2" size="small" class="mr-2">mdi-circle</v-icon>
-              <span class="text-body-2">Unassigned Shift</span>
-            </div>
-            <span class="font-weight-bold text-body-2">{{ unassignedShiftCount }}</span>
-          </div>
-
-          <div class="d-flex align-center justify-space-between">
-            <div class="d-flex align-center">
-              <v-icon color="blue-darken-1" size="small" class="mr-2">mdi-circle</v-icon>
-              <span class="text-body-2">Total Shifts</span>
-            </div>
-            <span class="font-weight-bold text-body-2">{{ shifts.length }}</span>
-          </div>
-        </v-card>
-      </v-col>
-
-      <v-col cols="12" md="9" lg="9">
-        <v-card elevation="2" class="pa-3 bg-white rounded-lg workspace-shell">
-          <div class="workspace-header mb-3">
-            <div class="d-flex align-center justify-space-between flex-wrap ga-3">
-              <div>
-                <div class="text-overline workspace-kicker">Schedule</div>
-                <div class="text-h5 font-weight-bold">{{ currentCalendarScheduleName }}</div>
-                <div v-if="currentCalendarSchedule" class="text-body-2 text-medium-emphasis">
-                  {{ currentCalendarSchedule.start_date }} to {{ currentCalendarSchedule.end_date }}
-                </div>
-              </div>
-
-              <div class="d-flex align-center flex-wrap justify-end ga-2">
-                <v-chip
-                  v-if="currentCalendarScheduleTypeLabel"
-                  color="blue"
-                  variant="tonal"
-                  size="small"
-                >
-                  {{ currentCalendarScheduleTypeLabel }}
-                </v-chip>
-              </div>
-            </div>
-
-            <div class="d-flex align-center justify-space-between flex-wrap ga-2 mt-3">
-              <div class="text-caption text-medium-emphasis">
-                Drag on the calendar to add shifts. Click an existing shift to edit staffing.
-              </div>
-
-              <div class="d-flex ga-2 flex-wrap">
-                <v-btn
-                  color="primary"
-                  variant="flat"
-                  prepend-icon="mdi-plus"
-                  @click="createScheduleDialog = true"
-                >
-                  New
-                </v-btn>
-                <v-btn
-                  v-if="activePanel === 'schedules' && selectedSchedule"
-                  color="primary"
-                  variant="tonal"
-                  :loading="isUpdatingSchedule"
-                  @click="toggleSelectedScheduleActive"
-                >
-                  {{ selectedSchedule?.type === "official" ? "Deactivate" : "Set as Active" }}
-                </v-btn>
-                <v-btn
-                  v-if="activePanel === 'templates' && templateApply.templateScheduleID"
-                  color="primary"
-                  variant="tonal"
-                  :loading="isApplyingTemplate"
-                  :disabled="!canApplyTemplate"
-                  @click="createFromTemplate"
-                >
-                  Use Template
-                </v-btn>
-              </div>
-            </div>
-          </div>
-
-          <div class="calendar-frame">
-          <Calendar
-            ref="managerCalendar"
-            :events="calendarEvents"
-            initialView="timeGridWeek"
-            :isEditable="false"
-            :isSelectable="true"
-            :height="760"
-            :contentHeight="700"
-            :firstDay="managerSettings.schedule_week_starts_monday ? 1 : 0"
-            @dates-changed="saveSessionState"
-            @time-selected="openCreateShiftModal"
-            @shift-clicked="openEditShiftModal"
-          />
-          </div>
-        </v-card>
-      </v-col>
-    </v-row>
+      <div class="calendar-frame">
+        <Calendar
+          ref="managerCalendar"
+          :events="calendarEvents"
+          initialView="timeGridWeek"
+          :isEditable="false"
+          :isSelectable="true"
+          :height="760"
+          :contentHeight="700"
+          :firstDay="managerSettings.schedule_week_starts_monday ? 1 : 0"
+          @dates-changed="saveSessionState"
+          @time-selected="openCreateShiftModal"
+          @shift-clicked="openEditShiftModal"
+        />
+      </div>
+    </v-card>
 
     <v-dialog v-model="createScheduleDialog" max-width="640" eager>
       <v-card>
         <v-card-title class="text-h6">Create Schedule</v-card-title>
         <v-card-text>
           <v-row dense>
-            <v-col cols="12" sm="6">
-              <v-select
-                v-model="newSchedule.type"
-                label="Create Type"
-                :items="creatableScheduleTypeOptions"
-                item-title="label"
-                item-value="value"
-                variant="outlined"
-                density="comfortable"
-                :menu-props="selectMenuProps"
-              />
-            </v-col>
             <v-col cols="12" sm="6">
               <v-select
                 v-model="newSchedule.cadence"
@@ -339,9 +130,6 @@
                 :menu-props="selectMenuProps"
               />
             </v-col>
-          </v-row>
-
-          <v-row dense>
             <v-col cols="12" sm="6">
               <v-text-field
                 v-model="newSchedule.anchor_date"
@@ -351,18 +139,10 @@
                 density="comfortable"
               />
             </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field
-                v-model="newSchedule.name"
-                :label="newSchedule.type === 'template' ? 'Template Name' : 'Schedule Name (Optional)'"
-                variant="outlined"
-                density="comfortable"
-              />
-            </v-col>
           </v-row>
 
           <v-sheet rounded="lg" class="pa-3 generated-range-sheet" border>
-            <div class="text-caption generated-range-label">Generated Range</div>
+            <div class="text-caption generated-range-label">Date Range</div>
             <div class="text-body-1 font-weight-medium generated-range-value">
               {{ computedScheduleRangeLabel || "Choose a week to generate the range." }}
             </div>
@@ -377,7 +157,7 @@
             :disabled="!canCreateSchedule"
             @click="createSchedule"
           >
-            {{ newSchedule.type === "template" ? "Create Template" : "Create Schedule" }}
+            Create Schedule
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -404,6 +184,35 @@
       </v-card>
     </v-dialog>
 
+    <v-dialog v-model="generateTemplateDialog.open" max-width="560" eager>
+      <v-card>
+        <v-card-title class="text-h6">Generate Template From Schedule</v-card-title>
+        <v-card-text>
+
+
+          <v-text-field
+            v-model="generateTemplateDialog.name"
+            label="Template Name"
+            variant="outlined"
+            density="comfortable"
+          />
+
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="closeGenerateTemplateDialog">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            :loading="generateTemplateDialog.saving"
+            :disabled="!canGenerateTemplate"
+            @click="generateTemplateFromSchedule"
+          >
+            Generate Template
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-model="shiftDialog.open" max-width="640" eager>
       <v-card>
         <v-card-title class="text-h6">
@@ -418,7 +227,7 @@
             density="compact"
             class="mb-3"
           >
-            Select or create a schedule first.
+            Select or create a schedule to add shifts
           </v-alert>
 
           <v-row dense>
@@ -561,7 +370,6 @@ export default {
         anchor_date: "",
         cadence: "weekly",
         type: "draft",
-        name: "",
       },
 
       scheduleCadenceOptions: [
@@ -620,6 +428,11 @@ export default {
         message: "",
         loading: false,
       },
+      generateTemplateDialog: {
+        open: false,
+        saving: false,
+        name: "",
+      },
 
       snackbar: {
         show: false,
@@ -651,7 +464,7 @@ export default {
 
     computedScheduleRangeLabel() {
       if (!this.computedScheduleRange) return "";
-      return `${this.computedScheduleRange.start_date} to ${this.computedScheduleRange.end_date}`;
+      return this.formatScheduleRange(this.computedScheduleRange);
     },
 
     creatableScheduleTypeOptions() {
@@ -668,12 +481,8 @@ export default {
       const hasCoreFields =
         !!this.managerDepartmentID &&
         !!this.newSchedule.anchor_date &&
-        !!this.newSchedule.cadence &&
-        !!this.newSchedule.type;
+        !!this.newSchedule.cadence;
       if (!hasCoreFields) return false;
-      if (this.newSchedule.type === "template" && !String(this.newSchedule.name || "").trim()) {
-        return false;
-      }
 
       return !!this.computedScheduleRange;
     },
@@ -692,6 +501,14 @@ export default {
         !!this.templateApply.templateScheduleID &&
         !!this.templateApply.anchor_date &&
         !!this.templateApply.type
+      );
+    },
+
+    canGenerateTemplate() {
+      return (
+        !!this.selectedSchedule &&
+        this.selectedSchedule.type !== "template" &&
+        !!String(this.generateTemplateDialog.name || "").trim()
       );
     },
 
@@ -724,7 +541,7 @@ export default {
         .filter((s) => s.type !== "template")
         .map((s) => ({
           value: s.ID,
-          label: `${s.name || "Untitled Schedule"} | ${s.type}`,
+          label: `${this.formatScheduleRange(s)} | ${this.formatScheduleType(s.type)}`,
         }));
     },
     firstScheduleID() {
@@ -738,14 +555,13 @@ export default {
     currentCalendarScheduleName() {
       const schedule = this.currentCalendarSchedule;
       if (!schedule) return "No schedule selected";
-      return schedule.name || (schedule.type === "template" ? "Untitled Template" : "Untitled Schedule");
+      return this.formatScheduleRange(schedule);
     },
 
     currentCalendarScheduleTypeLabel() {
       const schedule = this.currentCalendarSchedule;
       if (!schedule?.type) return "";
-      if (String(schedule.type).toLowerCase() === "official") return "Active";
-      return String(schedule.type).charAt(0).toUpperCase() + String(schedule.type).slice(1);
+      return this.formatScheduleType(schedule.type);
     },
 
     positionItems() {
@@ -898,6 +714,28 @@ export default {
       return String(value).slice(0, 5);
     },
 
+    formatDisplayDate(dateValue) {
+      if (!dateValue) return "";
+      const date = new Date(`${dateValue}T00:00:00`);
+      if (Number.isNaN(date.getTime())) return String(dateValue);
+      return new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }).format(date);
+    },
+
+    formatScheduleRange(schedule) {
+      if (!schedule?.start_date || !schedule?.end_date) return "";
+      return `${this.formatDisplayDate(schedule.start_date)} to ${this.formatDisplayDate(schedule.end_date)}`;
+    },
+
+    formatScheduleType(type) {
+      const normalized = String(type || "").trim().toLowerCase();
+      if (normalized === "official") return "Active";
+      return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : "";
+    },
+
     jumpCalendarToDate(dateStr) {
       if (!dateStr) return;
       this.$nextTick(() => {
@@ -922,6 +760,11 @@ export default {
       this.snackbar = { show: true, message, color };
     },
 
+    openCreateScheduleDialog() {
+      this.newSchedule.type = "draft";
+      this.createScheduleDialog = true;
+    },
+
     openDeleteConfirm(target) {
       this.deleteConfirm = {
         open: true,
@@ -943,6 +786,65 @@ export default {
         message: "",
         loading: false,
       };
+    },
+
+    openGenerateTemplateDialog() {
+      if (!this.selectedSchedule) return;
+      this.generateTemplateDialog = {
+        open: true,
+        saving: false,
+        name: `Template ${this.formatScheduleRange(this.selectedSchedule)}`,
+      };
+    },
+
+    closeGenerateTemplateDialog() {
+      this.generateTemplateDialog = {
+        open: false,
+        saving: false,
+        name: "",
+      };
+    },
+
+    async generateTemplateFromSchedule() {
+      if (!this.canGenerateTemplate) return;
+
+      try {
+        this.generateTemplateDialog.saving = true;
+        const sourceSchedule = this.selectedSchedule;
+        const sourceShifts = await shiftServices.getAll({ scheduleID: sourceSchedule.ID });
+        const shiftsToCopy = Array.isArray(sourceShifts) ? sourceShifts : [];
+
+        const createdTemplateRes = await scheduleServices.create({
+          name: String(this.generateTemplateDialog.name || "").trim(),
+          start_date: sourceSchedule.start_date,
+          end_date: sourceSchedule.end_date,
+          type: "template",
+          departmentID: this.managerDepartmentID,
+        });
+        const createdTemplate = createdTemplateRes?.data || createdTemplateRes;
+        const templateID = createdTemplate?.ID;
+        if (!templateID) throw new Error("Could not create template.");
+
+        for (const shift of shiftsToCopy) {
+          await shiftServices.create({
+            shift_date: shift.shift_date,
+            start_time: this.toHHMM(shift.start_time),
+            end_time: this.toHHMM(shift.end_time),
+            workers_required: shift.workers_required || 1,
+            scheduleID: templateID,
+            positionID: shift.positionID || null,
+          });
+        }
+
+        await this.loadSchedules();
+        this.closeGenerateTemplateDialog();
+        this.showMessage("Template generated from schedule.");
+      } catch (e) {
+        console.error(e);
+        this.showMessage(e?.response?.data?.message || e?.message || "Failed to generate template.", "error");
+      } finally {
+        this.generateTemplateDialog.saving = false;
+      }
     },
 
     async confirmDelete() {
@@ -1074,10 +976,7 @@ export default {
       const state = this.readSessionState();
       if (!state) return null;
 
-      this.activePanel =
-        state.activePanel === "templates" || state.activePanel === "schedules"
-          ? state.activePanel
-          : "schedules";
+      this.activePanel = "schedules";
       this.selectedScheduleID = state.selectedScheduleID || null;
       this.lastScheduleTabSelectionID = state.lastScheduleTabSelectionID || null;
       this.templateApply = {
@@ -1111,9 +1010,7 @@ export default {
       if (!this.selectedScheduleID) return;
       try {
         this.isUpdatingSchedule = true;
-        const payload = {
-          name: String(this.scheduleEditor.name || "").trim() || null,
-        };
+        const payload = { name: null };
         const res = await scheduleServices.update(this.selectedScheduleID, payload);
         const updated = res?.data || null;
         const keepSelectedID = this.selectedScheduleID;
@@ -1131,12 +1028,11 @@ export default {
       }
     },
 
-    async toggleSelectedScheduleActive() {
-      if (!this.selectedScheduleID) return;
+    async setSelectedScheduleActive() {
+      if (!this.selectedScheduleID || this.selectedSchedule?.type === "official") return;
       try {
         this.isUpdatingSchedule = true;
-        const nextType = this.selectedSchedule?.type === "official" ? "draft" : "official";
-        const res = await scheduleServices.update(this.selectedScheduleID, { type: nextType });
+        const res = await scheduleServices.update(this.selectedScheduleID, { type: "official" });
         const updated = res?.data || null;
         const keepSelectedID = this.selectedScheduleID;
         await this.loadSchedules();
@@ -1144,14 +1040,12 @@ export default {
         await this.loadShiftsForSelectedSchedule();
         this.jumpCalendarToDate(updated?.start_date || this.selectedSchedule?.start_date);
         this.refreshScheduleEditorFromSelected();
-        this.showMessage(
-          nextType === "official" ? "Schedule set as active." : "Schedule deactivated."
-        );
+        this.showMessage("Schedule set as active.");
       } catch (e) {
         console.error(e);
         this.showMessage(
           e?.response?.data?.message ||
-            "Failed to update the schedule active status.",
+            "Failed to set schedule as active.",
           "error"
         );
       } finally {
@@ -1327,7 +1221,7 @@ export default {
         const routeScheduleID = Number(this.$route?.query?.scheduleID);
         const routeTemplateID = Number(this.$route?.query?.templateID);
         if (Number.isFinite(routeScheduleID) && routeScheduleID > 0) {
-          const exists = this.schedules.some((s) => Number(s.ID) === routeScheduleID);
+          const exists = this.schedules.some((s) => Number(s.ID) === routeScheduleID && s.type !== "template");
           if (exists) {
             this.activePanel = "schedules";
             this.selectedScheduleID = routeScheduleID;
@@ -1339,31 +1233,22 @@ export default {
           return;
         }
         if (Number.isFinite(routeTemplateID) && routeTemplateID > 0) {
-          const exists = this.schedules.some((s) => Number(s.ID) === routeTemplateID && s.type === "template");
-          if (exists) {
-            this.activePanel = "templates";
-            this.templateApply.templateScheduleID = routeTemplateID;
-            await this.onTemplateSelected();
-            this.saveSessionState();
-          }
+          this.$router.push({
+            path: "/manager/templates",
+            query: { templateID: String(routeTemplateID) },
+          });
           return;
         }
 
         if (
           restoredState?.selectedScheduleID &&
-          this.schedules.some((s) => Number(s.ID) === Number(restoredState.selectedScheduleID))
+          this.schedules.some(
+            (s) => Number(s.ID) === Number(restoredState.selectedScheduleID) && s.type !== "template"
+          )
         ) {
           this.selectedScheduleID = restoredState.selectedScheduleID;
-          if (this.activePanel === "templates") {
-            this.templateApply.templateScheduleID =
-              restoredState.templateScheduleID || this.templateApply.templateScheduleID;
-            if (this.templateApply.templateScheduleID) {
-              await this.onTemplateSelected();
-            }
-          } else {
-            this.activePanel = "schedules";
-            await this.onScheduleSelected();
-          }
+          this.activePanel = "schedules";
+          await this.onScheduleSelected();
           this.jumpCalendarToDate(restoredState.calendarDate || this.currentCalendarSchedule?.start_date);
           this.saveSessionState();
           return;
@@ -1445,10 +1330,10 @@ export default {
         this.selectedScheduleID = null;
       }
 
-      if (!this.selectedScheduleID && this.schedules.length > 0) {
-        this.selectedScheduleID = this.getPreferredDefaultScheduleID() || this.schedules[0].ID;
+      if (!this.selectedScheduleID && scheduleIDs.size > 0) {
+        this.selectedScheduleID = this.getPreferredDefaultScheduleID();
         await this.loadShiftsForSelectedSchedule();
-        const first = this.schedules.find((s) => Number(s.ID) === Number(this.selectedScheduleID)) || this.schedules[0];
+        const first = this.schedules.find((s) => Number(s.ID) === Number(this.selectedScheduleID));
         this.jumpCalendarToDate(first?.start_date);
         this.refreshScheduleEditorFromSelected();
       }
@@ -1466,12 +1351,10 @@ export default {
         }
 
         const payload = {
-          name:
-            String(this.newSchedule.name || "").trim() ||
-            (this.newSchedule.type === "template" ? `Template ${range.start_date}` : `Schedule ${range.start_date}`),
+          name: null,
           start_date: range.start_date,
           end_date: range.end_date,
-          type: this.newSchedule.type,
+          type: "draft",
           departmentID: this.managerDepartmentID,
         };
 
@@ -1480,19 +1363,14 @@ export default {
 
         this.schedules = [createdSchedule, ...this.schedules];
         this.selectedScheduleID = createdSchedule?.ID ?? this.selectedScheduleID;
-        if (this.newSchedule.type !== "template") {
-          this.lastScheduleTabSelectionID = createdSchedule?.ID ?? this.lastScheduleTabSelectionID;
-        }
-        this.activePanel = this.newSchedule.type === "template" ? "templates" : "schedules";
-        if (this.newSchedule.type === "template") {
-          this.templateApply.templateScheduleID = createdSchedule?.ID ?? this.templateApply.templateScheduleID;
-        }
+        this.lastScheduleTabSelectionID = createdSchedule?.ID ?? this.lastScheduleTabSelectionID;
+        this.activePanel = "schedules";
         this.createScheduleDialog = false;
         await this.loadShiftsForSelectedSchedule();
         this.jumpCalendarToDate(createdSchedule?.start_date || range.start_date);
         this.refreshScheduleEditorFromSelected();
 
-        this.showMessage(`Schedule created as ${this.newSchedule.type} (${this.newSchedule.cadence}).`);
+        this.showMessage(`Schedule created (${this.newSchedule.cadence}).`);
         this.saveSessionState();
       } catch (e) {
         console.error(e);
@@ -1805,3 +1683,4 @@ export default {
   color: rgb(var(--v-theme-on-surface));
 }
 </style>
+

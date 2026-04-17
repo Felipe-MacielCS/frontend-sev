@@ -4,12 +4,6 @@
       <v-col cols="12" md="4">
         <v-card class="pa-4 bg-grey-lighten-3" elevation="1">
           <h2 class="text-h6 font-weight-bold mb-3">Manager Settings</h2>
-
-          <div class="text-body-2 mb-2">
-            These settings are saved for your department and give us one place to control
-            scheduling and clocking defaults.
-          </div>
-
           <div v-if="departmentName" class="text-body-2">
             <b>Department:</b> {{ departmentName }}
           </div>
