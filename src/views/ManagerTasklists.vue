@@ -1,12 +1,12 @@
 <template>
-  <v-container fluid class="pa-6 tasklists-page">
-    <v-card class="pa-4 tasklists-card" elevation="2">
+  <v-container fluid class="pa-6 bg-grey-lighten-4" style="min-height: 100vh;">
+    <v-card class="pa-4" elevation="2">
       <div class="d-flex justify-space-between align-start mb-4 flex-wrap ga-3">
         <div>
           <h2 class="text-h6 font-weight-bold mb-3">Tasklists</h2>
 
           <v-btn
-            color="#6f42c1"
+            color="#8b1e1e"
             class="text-white"
             elevation="0"
             @click="openCreateDialog"
@@ -29,15 +29,6 @@
         {{ error }}
       </v-alert>
 
-      <v-alert
-        v-if="!error && tasklists.length === 0 && !loading"
-        type="info"
-        variant="tonal"
-        class="mb-4"
-      >
-        No tasklists found for your department.
-      </v-alert>
-
       <v-table>
         <thead>
           <tr>
@@ -53,6 +44,15 @@
               <div class="d-inline-flex align-center ga-2">
                 <v-btn
                   size="small"
+                  color="#8b1e1e"
+                  class="text-white"
+                  elevation="0"
+                  @click="openViewDialog(tasklist)"
+                >
+                  View
+                </v-btn>
+                <v-btn
+                  size="small"
                   variant="text"
                   icon="mdi-pencil"
                   @click="openEditDialog(tasklist)"
@@ -63,7 +63,7 @@
                   icon="mdi-delete"
                   color="error"
                   :loading="deletingTasklistID === getTasklistId(tasklist)"
-                  @click="deleteTasklist(tasklist)"
+                  @click="openDeleteDialog(tasklist)"
                 />
               </div>
             </td>
@@ -141,7 +141,7 @@
 
         <v-btn
           variant="outlined"
-          color="#6f42c1"
+          color="#8b1e1e"
           class="text-none mb-2"
           prepend-icon="mdi-plus"
           @click="addTaskField"
@@ -152,7 +152,7 @@
         <div class="d-flex justify-end ga-2 mt-4">
           <v-btn variant="text" @click="closeDialog">Cancel</v-btn>
           <v-btn
-            color="#6f42c1"
+            color="#8b1e1e"
             class="text-white"
             :loading="dialog.saving"
             :disabled="dialog.saving"
@@ -160,6 +160,84 @@
           >
             {{ dialog.editingID ? "Save Changes" : "Add Tasklist" }}
           </v-btn>
+        </div>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="viewDialog.open" max-width="680">
+      <v-card class="pa-4">
+        <div class="d-flex align-center justify-space-between mb-3">
+          <h3 class="text-h6 font-weight-bold">
+            {{ viewDialog.tasklist?.name || "Tasklist" }}
+          </h3>
+          <v-btn icon="mdi-close" variant="text" @click="closeViewDialog" />
+        </div>
+
+        <v-alert
+          v-if="viewDialog.error"
+          type="error"
+          variant="tonal"
+          class="mb-4"
+        >
+          {{ viewDialog.error }}
+        </v-alert>
+
+        <div class="text-subtitle-2 font-weight-medium mb-3">Tasks</div>
+
+        <v-progress-linear
+          v-if="viewDialog.loading"
+          indeterminate
+          color="#8b1e1e"
+          class="mb-4"
+        />
+
+        
+
+        <div
+          v-for="(task, index) in viewDialog.tasks"
+          :key="getTaskId(task) || `view-task-${index}`"
+          class="tasklist-task-row mb-3"
+        >
+          <div class="text-subtitle-1 font-weight-bold mb-2">
+            {{ index + 1 }}. {{ task.name }}
+          </div>
+          <div v-if="task.description" class="text-body-2">
+            {{ task.description }}
+          </div>
+
+        </div>
+
+        <div class="d-flex justify-end mt-4">
+          <v-btn variant="text" @click="closeViewDialog">Close</v-btn>
+        </div>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="deleteDialog.open" max-width="460">
+      <v-card class="pa-4 text-center">
+        <div class="d-flex align-center justify-center mb-3 delete-dialog-header">
+          <h3 class="text-h6 font-weight-bold">Delete Tasklist?</h3>
+          <v-btn icon="mdi-close" variant="text" @click="closeDeleteDialog" />
+        </div>
+
+
+
+        <p class="mb-4 delete-dialog-message">
+          Are you sure you want to delete?
+          <strong>{{ deleteDialog.tasklist?.name || "this tasklist" }}</strong>?
+        </p>
+
+        <div class="d-flex justify-center ga-2">
+          <v-btn
+            color="#8b1e1e"
+            class="text-white"
+            :loading="deleteDialog.deleting"
+            :disabled="deleteDialog.deleting"
+            @click="confirmDeleteTasklist"
+          >
+            Delete Tasklist
+          </v-btn>
+          <v-btn variant="text" @click="closeDeleteDialog">Cancel</v-btn>
         </div>
       </v-card>
     </v-dialog>
@@ -172,6 +250,7 @@ import taskListItemServices from "../services/taskListItemServices.js";
 import taskListServices from "../services/taskListServices.js";
 
 const createEmptyTask = () => ({
+  ID: null,
   name: "",
   description: "",
 });
@@ -179,6 +258,7 @@ const createEmptyTask = () => ({
 const createDefaultDialogState = () => ({
   open: false,
   editingID: null,
+  originalTaskIDs: [],
   saving: false,
   error: "",
   form: {
@@ -198,6 +278,19 @@ export default {
       managerDepartmentID: null,
       deletingTasklistID: null,
       dialog: createDefaultDialogState(),
+      viewDialog: {
+        open: false,
+        loading: false,
+        error: "",
+        tasklist: null,
+        tasks: [],
+      },
+      deleteDialog: {
+        open: false,
+        deleting: false,
+        error: "",
+        tasklist: null,
+      },
     };
   },
   computed: {
@@ -222,6 +315,10 @@ export default {
 
     getTasklistId(tasklist) {
       return tasklist?.ID ?? tasklist?.id ?? null;
+    },
+
+    getTaskId(task) {
+      return task?.ID ?? task?.id ?? null;
     },
 
     async getManagerDepartmentID() {
@@ -276,10 +373,51 @@ export default {
       this.dialog.open = true;
     },
 
-    openEditDialog(tasklist) {
+    async openViewDialog(tasklist) {
+      this.viewDialog = {
+        open: true,
+        loading: true,
+        error: "",
+        tasklist,
+        tasks: [],
+      };
+
+      try {
+        const response = await taskListItemServices.getAll({
+          taskListID: this.getTasklistId(tasklist),
+        });
+
+        this.viewDialog = {
+          ...this.viewDialog,
+          loading: false,
+          tasks: Array.isArray(response) ? response : [],
+        };
+      } catch (error) {
+        console.error("Failed to load tasklist tasks:", error?.response?.data || error);
+        this.viewDialog = {
+          ...this.viewDialog,
+          loading: false,
+          error: error?.response?.data?.message || "Failed to load tasklist tasks.",
+        };
+      }
+    },
+
+    closeViewDialog() {
+      this.viewDialog = {
+        open: false,
+        loading: false,
+        error: "",
+        tasklist: null,
+        tasks: [],
+      };
+    },
+
+    async openEditDialog(tasklist) {
+      const tasklistID = this.getTasklistId(tasklist);
       this.dialog = {
         open: true,
-        editingID: this.getTasklistId(tasklist),
+        editingID: tasklistID,
+        originalTaskIDs: [],
         saving: false,
         error: "",
         form: {
@@ -287,6 +425,34 @@ export default {
           tasks: [createEmptyTask()],
         },
       };
+
+      try {
+        const response = await taskListItemServices.getAll({
+          taskListID: tasklistID,
+        });
+        const tasks = Array.isArray(response)
+          ? response.map((task) => ({
+              ID: this.getTaskId(task),
+              name: task?.name || "",
+              description: task?.description || "",
+            }))
+          : [];
+
+        this.dialog = {
+          ...this.dialog,
+          originalTaskIDs: tasks.map((task) => task.ID).filter(Boolean),
+          form: {
+            ...this.dialog.form,
+            tasks: tasks.length > 0 ? tasks : [createEmptyTask()],
+          },
+        };
+      } catch (error) {
+        console.error("Failed to load tasklist tasks:", error?.response?.data || error);
+        this.dialog = {
+          ...this.dialog,
+          error: error?.response?.data?.message || "Failed to load tasklist tasks.",
+        };
+      }
     },
 
     closeDialog() {
@@ -318,6 +484,7 @@ export default {
       const name = this.dialog.form.name.trim();
       const validTasks = this.dialog.form.tasks
         .map((task) => ({
+          ID: this.getTaskId(task),
           name: String(task?.name ?? "").trim(),
           description: String(task?.description ?? "").trim(),
         }))
@@ -331,7 +498,7 @@ export default {
         return;
       }
 
-      if (!this.dialog.editingID && validTasks.length === 0) {
+      if (validTasks.length === 0) {
         this.dialog = {
           ...this.dialog,
           error: "Add at least one task with a task name.",
@@ -368,6 +535,7 @@ export default {
       try {
         if (this.dialog.editingID) {
           await taskListServices.update(this.dialog.editingID, payload);
+          await this.syncTaskItems(this.dialog.editingID, validTasks);
         } else {
           const createdTasklist = await taskListServices.create(payload);
           const tasklistID = this.getTasklistId(createdTasklist);
@@ -376,20 +544,7 @@ export default {
             throw new Error("Tasklist was created but no ID was returned.");
           }
 
-          const taskCreateResults = await Promise.allSettled(
-            validTasks.map((task) =>
-              taskListItemServices.create({
-                name: task.name,
-                description: task.description || null,
-                taskListID: tasklistID,
-              })
-            )
-          );
-
-          const failedTaskCreates = taskCreateResults.filter((result) => result.status === "rejected");
-          if (failedTaskCreates.length > 0) {
-            console.error("Some task items failed to save:", failedTaskCreates);
-          }
+          await this.createTaskItems(tasklistID, validTasks);
         }
 
         await this.loadTasklists();
@@ -407,11 +562,74 @@ export default {
       }
     },
 
+    async createTaskItems(tasklistID, tasks) {
+      await Promise.all(
+        tasks.map((task) =>
+          taskListItemServices.create({
+            name: task.name,
+            description: task.description || null,
+            taskListID: tasklistID,
+            task_listID: tasklistID,
+          })
+        )
+      );
+    },
+
+    async syncTaskItems(tasklistID, tasks) {
+      const nextExistingIDs = tasks.map((task) => task.ID).filter(Boolean).map(String);
+      const deletedTaskIDs = this.dialog.originalTaskIDs.filter(
+        (taskID) => !nextExistingIDs.includes(String(taskID))
+      );
+
+      await Promise.all([
+        ...tasks.map((task) => {
+          const payload = {
+            name: task.name,
+            description: task.description || null,
+            taskListID: tasklistID,
+            task_listID: tasklistID,
+          };
+
+          return task.ID
+            ? taskListItemServices.update(task.ID, payload)
+            : taskListItemServices.create(payload);
+        }),
+        ...deletedTaskIDs.map((taskID) => taskListItemServices.delete(taskID)),
+      ]);
+    },
+
+    openDeleteDialog(tasklist) {
+      this.deleteDialog = {
+        open: true,
+        deleting: false,
+        error: "",
+        tasklist,
+      };
+    },
+
+    closeDeleteDialog() {
+      this.deleteDialog = {
+        open: false,
+        deleting: false,
+        error: "",
+        tasklist: null,
+      };
+    },
+
+    async confirmDeleteTasklist() {
+      await this.deleteTasklist(this.deleteDialog.tasklist);
+    },
+
     async deleteTasklist(tasklist) {
       const tasklistID = this.getTasklistId(tasklist);
       if (!tasklistID) return;
 
       this.deletingTasklistID = tasklistID;
+      this.deleteDialog = {
+        ...this.deleteDialog,
+        deleting: true,
+        error: "",
+      };
       this.error = "";
 
       try {
@@ -423,9 +641,15 @@ export default {
         if (String(this.dialog.editingID) === String(tasklistID)) {
           this.closeDialog();
         }
+
+        this.closeDeleteDialog();
       } catch (error) {
         console.error("Failed to delete tasklist:", error?.response?.data || error);
-        this.error = error?.response?.data?.message || "Failed to delete tasklist.";
+        this.deleteDialog = {
+          ...this.deleteDialog,
+          deleting: false,
+          error: error?.response?.data?.message || "Failed to delete tasklist.",
+        };
       } finally {
         this.deletingTasklistID = null;
       }
@@ -435,23 +659,25 @@ export default {
 </script>
 
 <style scoped>
-.tasklists-page {
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at top right, rgba(168, 85, 247, 0.18), transparent 24%),
-    linear-gradient(180deg, #f4efff 0%, #ede4ff 100%);
-}
-
-.tasklists-card {
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(111, 66, 193, 0.14);
-  backdrop-filter: blur(6px);
-}
-
 .tasklist-task-row {
-  border: 1px solid rgba(111, 66, 193, 0.18);
+  border: 1px solid rgba(139, 30, 30, 0.16);
   border-radius: 12px;
   padding: 16px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 239, 255, 0.9));
+  background: #fff;
+}
+
+.delete-dialog-header {
+  position: relative;
+}
+
+.delete-dialog-header .v-btn {
+  position: absolute;
+  right: 0;
+}
+
+.delete-dialog-message {
+  max-width: 360px;
+  margin-left: auto;
+  margin-right: auto;
 }
 </style>
