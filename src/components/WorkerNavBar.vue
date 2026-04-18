@@ -42,6 +42,14 @@
       {{ quickClockOpenRecord ? "Clock Out" : "Clock In" }}
     </v-btn>
 
+    <NotificationMenuButton
+      :items="notifications"
+      :loading="notificationsLoading"
+      title="Notifications"
+      button-label="Open worker notifications"
+      icon="mdi-bell-outline"
+    />
+
     <v-btn icon="mdi-cog" variant="text" class="mr-1" to="/worker/settings"></v-btn>
   </v-app-bar>
 
@@ -81,9 +89,13 @@ import userShiftServices from "../services/userShiftServices.js";
 import shiftServices from "../services/shiftServices.js";
 import scheduleServices from "../services/scheduleServices.js";
 import clockInOutServices from "../services/clockInOutServices.js";
+import NotificationMenuButton from "./NotificationMenuButton.vue";
+import { getWorkerNotificationFeed } from "../services/notificationFeedServices.js";
+import { subscribeToNotificationRefresh } from "../services/notificationSync.js";
 
 const DRAWER_STORAGE_KEY = "worker_nav_drawer_open";
 const FILTER_STORAGE_KEY = "worker_dashboard_filters";
+const NOTIFICATION_POLL_MS = 5000;
 
 const drawer = ref(true);
 const route = useRoute();
@@ -91,6 +103,8 @@ const isWorkerDashboard = computed(() => route.path === "/worker");
 const quickClockLoading = ref(false);
 const quickClockContext = ref(null);
 const quickClockContexts = ref([]);
+const notifications = ref([]);
+const notificationsLoading = ref(false);
 const nowTick = ref(Date.now());
 const filters = ref({
   position: "Positions",
@@ -98,6 +112,8 @@ const filters = ref({
   worker: "Workers",
 });
 let countdownInterval = null;
+let notificationInterval = null;
+let unsubscribeNotificationRefresh = null;
 
 const normalizeID = (raw) => {
   const id = Number(raw);
@@ -208,6 +224,23 @@ const loadQuickClockData = async () => {
   }
 };
 
+const loadNotifications = async () => {
+  try {
+    notificationsLoading.value = true;
+    const userID = getCurrentUserID();
+    notifications.value = userID ? await getWorkerNotificationFeed(userID) : [];
+  } catch (error) {
+    console.error("Failed to load worker notifications:", error?.response?.data || error);
+    notifications.value = [];
+  } finally {
+    notificationsLoading.value = false;
+  }
+};
+
+const handleNotificationRefresh = () => {
+  loadNotifications();
+};
+
 const quickClockOpenRecord = computed(
   () => quickClockContext.value?.clockRecords?.find((record) => !record.clock_out_time) || null
 );
@@ -282,16 +315,27 @@ onMounted(() => {
   }
 
   loadQuickClockData();
+  loadNotifications();
 
   countdownInterval = window.setInterval(() => {
     nowTick.value = Date.now();
   }, 1000);
+  notificationInterval = window.setInterval(loadNotifications, NOTIFICATION_POLL_MS);
+  unsubscribeNotificationRefresh = subscribeToNotificationRefresh(handleNotificationRefresh);
 });
 
 onBeforeUnmount(() => {
   if (countdownInterval) {
     window.clearInterval(countdownInterval);
     countdownInterval = null;
+  }
+  if (notificationInterval) {
+    window.clearInterval(notificationInterval);
+    notificationInterval = null;
+  }
+  if (unsubscribeNotificationRefresh) {
+    unsubscribeNotificationRefresh();
+    unsubscribeNotificationRefresh = null;
   }
 });
 
@@ -316,6 +360,7 @@ watch(
   () => route.path,
   () => {
     loadQuickClockData();
+    loadNotifications();
   }
 );
 
@@ -324,7 +369,7 @@ const navItems = [
   { title: "Time Log", to: "/worker/clock", icon: "mdi-timer-outline" },
   { title: "Trade Board", to: "/worker/tradeboard", icon: "mdi-swap-horizontal" },
   { title: "Announcements", to: "/worker/announcements", icon: "mdi-bullhorn-outline" },
-  { title: "Availability", to: "/worker/availability", icon: "mdi-calendar-clock-outline" },
+  { title: "Unvailability", to: "/worker/availability", icon: "mdi-calendar-clock-outline" },
   { title: "Settings", to: "/worker/settings", icon: "mdi-cog-outline" },
 ];
 </script>

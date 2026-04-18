@@ -537,6 +537,7 @@ import userServices from "../services/userServices.js";
 import positionServices from "../services/positionServices.js";
 import settingsServices from "../services/settingsServices.js";
 import settingsValuesServices from "../services/settingsValuesServices.js";
+import { emitNotificationRefresh } from "../services/notificationSync.js";
 
 const SESSION_STORAGE_KEY = "manager-schedule-page-state-v1";
 
@@ -1658,6 +1659,7 @@ export default {
           this.showMessage("Shift saved but shift ID was not returned.", "warning");
           await this.loadShiftsForSelectedSchedule();
           this.closeShiftDialog();
+          emitNotificationRefresh();
           return;
         }
 
@@ -1714,6 +1716,7 @@ export default {
 
         await this.loadShiftsForSelectedSchedule();
         this.closeShiftDialog();
+        emitNotificationRefresh();
         if (assignmentErrors.length > 0) {
           this.showMessage(`Shift saved, but assignments failed: ${assignmentErrors[0]}`, "warning");
         } else {
@@ -1740,6 +1743,7 @@ export default {
         await shiftServices.delete(this.shiftDialog.shiftID);
         await this.loadShiftsForSelectedSchedule();
         this.closeShiftDialog();
+        emitNotificationRefresh();
         this.showMessage("Shift deleted.");
       } catch (e) {
         console.error(e);

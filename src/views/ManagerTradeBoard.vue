@@ -230,6 +230,7 @@ import departmentUsersServices from "../services/departmentUsersServices.js";
 import userServices from "../services/userServices.js";
 import positionServices from "../services/positionServices.js";
 import swapShiftRequestServices from "../services/swapShiftRequestServices.js";
+import { emitNotificationRefresh } from "../services/notificationSync.js";
 
 export default {
   name: "ManagerTradeBoard",
@@ -677,6 +678,7 @@ export default {
           approvedUserID,
         });
         await this.loadManagerTradeBoard();
+        emitNotificationRefresh();
         this.showSnackbar(`${selectedName} was assigned to the trade request.`);
       } catch (error) {
         console.error("Failed to approve trade response:", error?.response?.data || error);
