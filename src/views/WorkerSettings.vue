@@ -29,7 +29,6 @@
                 density="comfortable"
                 :readonly="studentIdLocked"
                 :disabled="studentIdLocked || savingStudentID"
-                hint="Numbers only. Once saved, this ID is locked and classes sync automatically."
                 persistent-hint
                 prepend-inner-icon="mdi-card-account-details-outline"
               />
@@ -59,12 +58,10 @@
                 @update:modelValue="saveDarkMode"
               />
 
+
             </v-card-text>
           </v-card>
 
-          <div v-if="loading || savingDarkMode || savingStudentID || syncingStudentSchedule" class="text-caption text-medium-emphasis mt-4">
-            Saving...
-          </div>
         </v-card>
       </v-col>
     </v-row>

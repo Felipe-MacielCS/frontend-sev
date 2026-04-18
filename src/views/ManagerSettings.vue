@@ -4,12 +4,6 @@
       <v-col cols="12" md="4">
         <v-card class="pa-4 bg-grey-lighten-3" elevation="1">
           <h2 class="text-h6 font-weight-bold mb-3">Manager Settings</h2>
-
-          <div class="text-body-2 mb-2">
-            These settings are saved for your department and give us one place to control
-            scheduling and clocking defaults.
-          </div>
-
           <div v-if="departmentName" class="text-body-2">
             <b>Department:</b> {{ departmentName }}
           </div>
@@ -109,7 +103,6 @@ const MANAGER_SETTING_DEFINITIONS = [
     label: "Week Starts On Monday",
     value_type: "bool",
     default_value: "false",
-    description: "We can use this later to control how weekly schedules align.",
     section: "scheduling",
   },
   {
@@ -117,7 +110,6 @@ const MANAGER_SETTING_DEFINITIONS = [
     label: "Default Workers Required",
     value_type: "int",
     default_value: "1",
-    description: "Used as the default worker count when creating shifts.",
     section: "scheduling",
   },
   {
@@ -125,7 +117,6 @@ const MANAGER_SETTING_DEFINITIONS = [
     label: "Allow Shift Overlap",
     value_type: "bool",
     default_value: "false",
-    description: "Allow shifts in the same schedule to overlap each other.",
     section: "scheduling",
   },
   {
@@ -133,31 +124,13 @@ const MANAGER_SETTING_DEFINITIONS = [
     label: "Allowed Shift Overlap Minutes",
     value_type: "int",
     default_value: "0",
-    description: "Maximum overlap allowed between shifts in the same schedule.",
     section: "scheduling",
-  },
-  {
-    key: "clock_in_early_window_minutes",
-    label: "Clock-In Early Window (Minutes)",
-    value_type: "int",
-    default_value: "15",
-    description: "How early a worker can clock in before a shift.",
-    section: "clocking",
-  },
-  {
-    key: "clock_out_grace_minutes",
-    label: "Clock-Out Grace Window (Minutes)",
-    value_type: "int",
-    default_value: "15",
-    description: "How long after a shift a worker can still clock out normally.",
-    section: "clocking",
   },
   {
     key: "manager_dark_mode",
     label: "Dark Mode",
     value_type: "bool",
     default_value: "false",
-    description: "Test toggle for the manager interface theme.",
     section: "general",
   },
 ];
@@ -184,7 +157,6 @@ export default {
       const sections = [
         { key: "general", label: "General" },
         { key: "scheduling", label: "Scheduling" },
-        { key: "clocking", label: "Clocking" },
       ];
 
       return sections

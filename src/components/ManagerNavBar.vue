@@ -144,8 +144,8 @@ onBeforeUnmount(() => {
 });
 
 const navItems = [
-  { title: "Templates", to: "/manager/templates", icon: "mdi-file-document-outline" },
   { title: "Schedule", to: "/manager", icon: "mdi-calendar-month-outline" },
+  { title: "Templates", to: "/manager/templates", icon: "mdi-file-document-outline" },
   { title: "Users", to: "/manager/users", icon: "mdi-account-group-outline" },
   { title: "Budget", to: "/manager/budget", icon: "mdi-cash-multiple" },
   { title: "Trade Board", to: "/manager/tradeboard", icon: "mdi-swap-horizontal" },
