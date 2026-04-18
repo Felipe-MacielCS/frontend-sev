@@ -27,9 +27,7 @@
             </v-btn>
           </div>
 
-          <div v-else class="text-body-2 text-medium-emphasis">
-            No assigned official shift is available right now for clocking.
-          </div>
+          <div v-else />
         </v-card>
       </v-col>
 
@@ -41,20 +39,7 @@
           </v-card-title>
 
           <v-card-text>
-            <v-alert v-if="error" type="error" variant="tonal" class="mb-4">
-              {{ error }}
-            </v-alert>
-
-            <v-alert
-              v-else-if="timeRecords.length === 0 && !loading"
-              type="info"
-              variant="tonal"
-              class="mb-4"
-            >
-              No clock records yet.
-            </v-alert>
-
-            <v-table v-else>
+            <v-table v-if="timeRecords.length > 0">
               <thead>
                 <tr>
                   <th>Date</th>
