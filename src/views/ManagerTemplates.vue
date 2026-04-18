@@ -83,7 +83,7 @@
             color="primary"
             prepend-icon="mdi-calendar-plus"
             :disabled="!selectedTemplate"
-            @click="openCreateShiftFromButton"
+            @click="openCreateShift"
           >
             New Shift
           </v-btn>
@@ -102,7 +102,18 @@
         </div>
       </div>
 
+      <v-alert v-if="error" type="error" variant="tonal" class="mb-3">
+        {{ error }}
+      </v-alert>
 
+      <v-alert
+        v-if="!error && templates.length === 0 && !loading"
+        type="info"
+        variant="tonal"
+        class="mb-3"
+      >
+        No templates yet
+      </v-alert>
 
       <div class="calendar-frame">
         <Calendar
@@ -114,7 +125,7 @@
           :height="760"
           :contentHeight="700"
           :slotEventOverlap="false"
-          @time-selected="openCreateShiftModal"
+          @time-selected="openCreateShift"
           @shift-clicked="openEditShiftModal"
         />
       </div>
@@ -152,8 +163,6 @@
           {{ shiftDialog.mode === "create" ? "Create Template Shift" : "Edit Template Shift" }}
         </v-card-title>
         <v-card-text>
-
-
           <v-row dense>
             <v-col cols="12" sm="4">
               <v-text-field v-model="shiftDialog.form.shift_date" label="Shift Date" type="date" variant="outlined" />
@@ -530,7 +539,7 @@ export default {
           : Array.isArray(res?.data)
             ? res.data
             : [];
-            
+
       this.positionsByID = positions.reduce((acc, p) => {
         const id = p.positionID ?? p.ID;
         if (id) acc[id] = p;
@@ -614,9 +623,12 @@ export default {
           type: "template",
         });
         const updated = res?.data;
-        
-        this.templates = this.templates.map((t) => Number(t.ID) === Number(this.selectedTemplateID) ? { ...t, ...(updated || {}), 
-        name: this.templateEditor.name } : t);
+
+        this.templates = this.templates.map((t) =>
+          Number(t.ID) === Number(this.selectedTemplateID)
+            ? { ...t, ...(updated || {}), name: this.templateEditor.name }
+            : t
+        );
       } catch (e) {
         console.error(e);
         this.showMessage(e?.response?.data?.message || "Failed to save template.", "error");
@@ -713,7 +725,6 @@ export default {
         this.selectedTemplateID = this.templates[0]?.ID || null;
         this.deleteConfirm.open = false;
         await this.onTemplateSelected();
-
       } catch (e) {
         console.error(e);
         this.showMessage(e?.response?.data?.message || "Failed to delete template.", "error");
@@ -721,13 +732,30 @@ export default {
         this.isDeletingTemplate = false;
       }
     },
-    openCreateShiftForm(start, end) {
+    openCreateShift(selection = null) {
+      if (!this.selectedTemplateID) return;
+
+      let start;
+      let end;
+
+      if (selection?.start && selection?.end) {
+        start = new Date(selection.start);
+        end = new Date(selection.end);
+      } else {
+        const selectedDate =
+          this.$refs.templateCalendar?.getCurrentDate?.() ||
+          this.selectedTemplate?.start_date ||
+          this.toISODate(new Date());
+        start = new Date(`${selectedDate}T09:00:00`);
+        end = new Date(`${selectedDate}T10:00:00`);
+      }
+
       this.shiftDialog = {
         open: true,
         mode: "create",
         shiftID: null,
         form: {
-          shift_date: start.toISOString().slice(0, 10),
+          shift_date: this.toISODate(start),
           start_time: start.toTimeString().slice(0, 5),
           end_time: end.toTimeString().slice(0, 5),
           workers_required: 1,
@@ -735,28 +763,6 @@ export default {
           assignedWorkerIDs: [],
         },
       };
-    },
-    openCreateShiftFromButton() {
-      if (!this.selectedTemplateID) {
-        return;
-      }
-
-      const selectedDate =
-        this.$refs.templateCalendar?.getCurrentDate?.() ||
-        this.selectedTemplate?.start_date ||
-        this.toISODate(new Date());
-      const start = new Date(`${selectedDate}T09:00:00`);
-      const end = new Date(`${selectedDate}T10:00:00`);
-
-      this.openCreateShiftForm(start, end);
-    },
-    openCreateShiftModal(selection) {
-      if (!this.selectedTemplateID) {
-
-        return;
-      }
-
-      this.openCreateShiftForm(new Date(selection.start), new Date(selection.end));
     },
     async openEditShiftModal(event) {
       const shiftID = Number(event?.id ?? event?._def?.publicId ?? event?.extendedProps?.shiftID);
@@ -871,7 +877,6 @@ export default {
         if (assignmentErrors.length > 0) {
           this.showMessage(`Template shift saved, but assignments failed: ${assignmentErrors[0]}`, "warning");
         }
-
       } catch (e) {
         console.error(e);
         this.showMessage(e?.response?.data?.message || "Failed to save template shift.", "error");
@@ -886,7 +891,6 @@ export default {
         await shiftServices.delete(this.shiftDialog.shiftID);
         await this.loadShiftsForSelectedTemplate();
         this.closeShiftDialog();
-
       } catch (e) {
         console.error(e);
         this.showMessage("Failed to delete template shift.", "error");
@@ -913,24 +917,7 @@ export default {
   color: rgba(var(--v-theme-on-surface), 0.58);
 }
 
-.schedule-summary-sheet {
-  min-height: 56px;
-  background: linear-gradient(180deg, rgba(128, 22, 43, 0.05) 0%, rgba(128, 22, 43, 0.01) 100%);
-}
-
 .calendar-frame {
   padding: 4px;
-}
-
-.generated-range-sheet {
-  background: rgba(var(--v-theme-surface-variant), 0.35);
-}
-
-.generated-range-label {
-  color: rgba(var(--v-theme-on-surface), 0.62);
-}
-
-.generated-range-value {
-  color: rgb(var(--v-theme-on-surface));
 }
 </style>

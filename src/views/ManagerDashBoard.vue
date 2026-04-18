@@ -1887,20 +1887,6 @@ export default {
       };
     },
 
-    openCreateShift(selection = null) {
-    
-
-      let start;
-      let end;
-
-      if (selection?.start && selection?.end) {
-        start = new Date(selection.start);
-        end = new Date(selection.end);
-      } else {
-        const selectedDate =
-          this.$refs.managerCalendar?.getCurrentDate?.() ||
-          this.currentCalendarSchedule?.start_date ||
-          this.toISODate(new Date());
     async loadTasklistsForShift(shiftID) {
       let rows = [];
       try {
@@ -1914,11 +1900,23 @@ export default {
       };
     },
 
-    async openCreateShiftModal(selection) {
+    async openCreateShift(selection = null) {
       if (!this.selectedScheduleID) {
         this.showMessage("Create or select a schedule first.", "warning");
         return;
       }
+
+      let start;
+      let end;
+
+      if (selection?.start && selection?.end) {
+        start = new Date(selection.start);
+        end = new Date(selection.end);
+      } else {
+        const selectedDate =
+          this.$refs.managerCalendar?.getCurrentDate?.() ||
+          this.currentCalendarSchedule?.start_date ||
+          this.toISODate(new Date());
 
         start = new Date(`${selectedDate}T09:00:00`);
         end = new Date(`${selectedDate}T10:00:00`);
