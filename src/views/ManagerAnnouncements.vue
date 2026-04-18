@@ -3,10 +3,10 @@
     <v-row justify="center">
       <v-col cols="12" md="10" lg="8">
         <div class="page-header mb-6">
-          <div class="text-overline page-kicker">Manager Communications</div>
+          <div class="text-overline page-kicker">Manager Announcements</div>
           <h1 class="text-h4 font-weight-bold mb-2">Announcements</h1>
           <p class="text-body-1 text-medium-emphasis mb-0">
-            Draft the message you want to send to your team by email.
+            Write the message you want to send to your team by email.
           </p>
         </div>
 
@@ -105,10 +105,6 @@
                   color="primary"
                   class="mb-4"
                 />
-
-                <div v-if="!historyLoading && !announcements.length" class="empty-history">
-                  No announcements have been sent yet.
-                </div>
 
                 <v-card
                   v-for="announcement in announcements"

@@ -17,26 +17,10 @@
             </v-chip>
           </div>
 
-          <v-alert
-            v-if="requiresStudentIdSetup"
-            type="info"
-            variant="tonal"
-            class="mb-5"
-            text="Enter your OC student ID to import your schedule for unavailability"
-          />
-
           <v-card class="mb-5" variant="outlined">
             <v-card-title class="text-subtitle-1 font-weight-bold">Class Schedule Sync</v-card-title>
             <v-card-text>
 
-
-              <v-alert
-                v-if="studentIdLocked"
-                type="success"
-                variant="tonal"
-                class="mb-4"
-                text="Your student ID is locked"
-              />
 
               <v-text-field
                 v-model="studentID"

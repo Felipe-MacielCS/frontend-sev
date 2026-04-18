@@ -336,6 +336,37 @@
             closable-chips
             class="mt-1"
             :menu-props="selectMenuProps"
+            :hint="shiftDialogAvailabilitySummary"
+            persistent-hint
+          >
+
+            <template #item="{ props, item }">
+              <v-list-item v-bind="props" :subtitle="item.raw.subtitle">
+                <template #append>
+                  <v-chip
+                    :color="item.raw.available ? 'success' : 'warning'"
+                    size="x-small"
+                    variant="tonal"
+                  >
+                    {{ item.raw.available ? "Available" : "Unavailable" }}
+                  </v-chip>
+                </template>
+              </v-list-item>
+            </template>
+          </v-select>
+
+          <v-select
+            v-model="shiftDialog.form.selectedTaskListIDs"
+            :items="tasklistItems"
+            item-title="label"
+            item-value="value"
+            label="Tasklists"
+            variant="outlined"
+            density="comfortable"
+            multiple
+            chips
+            closable-chips
+            class="mt-1"
           />
         </v-card-text>
 
@@ -378,6 +409,8 @@
 import Calendar from "../components/Calendar.vue";
 import scheduleServices from "../services/scheduleServices.js";
 import shiftServices from "../services/shiftServices.js";
+import shiftTaskListServices from "../services/shiftTaskListServices.js";
+import taskListServices from "../services/taskListServices.js";
 import userShiftServices from "../services/userShiftServices.js";
 import departmentUsersServices from "../services/departmentUsersServices.js";
 import userServices from "../services/userServices.js";
@@ -385,6 +418,8 @@ import positionServices from "../services/positionServices.js";
 import settingsServices from "../services/settingsServices.js";
 import settingsValuesServices from "../services/settingsValuesServices.js";
 import { getPositionColor, UNASSIGNED_SHIFT_COLOR } from "../utils/positionColors.js";
+import unavailableServices from "../services/unavailableServices.js";
+import { emitNotificationRefresh } from "../services/notificationSync.js";
 
 const SESSION_STORAGE_KEY = "manager-schedule-page-state-v1";
 
@@ -410,6 +445,7 @@ export default {
         type: "draft",
       },
 
+      
       scheduleTypeOptions: [
         { label: "Draft", value: "draft" },
         { label: "Template", value: "template" },
@@ -432,8 +468,11 @@ export default {
 
       shifts: [],
       userShiftAssignmentsByShiftID: {},
+      shiftTaskListsByShiftID: {},
       workersByID: {},
       positionsByID: {},
+      tasklists: [],
+      unavailabilityBlocks: [],
       managerSettings: {
         schedule_week_starts_monday: false,
         default_shift_workers_required: 1,
@@ -452,6 +491,7 @@ export default {
           workers_required: 1,
           positionID: null,
           assignedWorkerIDs: [],
+          selectedTaskListIDs: [],
         },
       },
       deleteConfirm: {
@@ -599,7 +639,6 @@ export default {
     firstScheduleID() {
       return this.scheduleItems[0]?.value || null;
     },
-
     currentCalendarSchedule() {
       return this.schedules.find((s) => Number(s.ID) === Number(this.selectedScheduleID)) || null;
     },
@@ -630,20 +669,126 @@ export default {
     },
 
     workerItems() {
+      const availabilityByWorkerID = this.shiftDialogAvailabilityByWorkerID;
       const list = Object.values(this.workersByID);
+
       return list
         .map((w) => {
           const id = Number(w.ID ?? w.userID ?? w.id);
           if (!Number.isFinite(id) || id <= 0) return null;
-          return { value: id, label: w.name || `Worker ${id}` };
+
+          const label = w.name || `Worker ${id}`;
+          const availability = availabilityByWorkerID[id] || {
+            available: true,
+            subtitle: "Set the shift date and time to check availability.",
+          };
+
+          return {
+            value: id,
+            label,
+            available: availability.available,
+            subtitle: availability.subtitle,
+          };
         })
-        .filter(Boolean);
+        .filter(Boolean)
+        .sort((a, b) => {
+          if (a.available !== b.available) return a.available ? -1 : 1;
+          return a.label.localeCompare(b.label);
+        });
+    },
+
+    shiftDialogWindow() {
+      const shiftDate = this.shiftDialog?.form?.shift_date;
+      const startTime = this.toHHMM(this.shiftDialog?.form?.start_time);
+      const endTime = this.toHHMM(this.shiftDialog?.form?.end_time);
+
+      if (!shiftDate || !startTime || !endTime) return null;
+
+      const start = new Date(`${shiftDate}T${startTime}:00`);
+      const end = new Date(`${shiftDate}T${endTime}:00`);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) {
+        return null;
+      }
+
+      return { start, end };
+    },
+
+    shiftDialogAvailabilityByWorkerID() {
+      const window = this.shiftDialogWindow;
+      const blocks = Array.isArray(this.unavailabilityBlocks) ? this.unavailabilityBlocks : [];
+
+      return Object.values(this.workersByID).reduce((map, worker) => {
+        const id = Number(worker.ID ?? worker.userID ?? worker.id);
+        if (!Number.isFinite(id) || id <= 0) return map;
+
+        if (!window) {
+          map[id] = {
+            available: true,
+            subtitle: "Set the shift date and time to check availability.",
+          };
+          return map;
+        }
+
+        const unavailable = blocks.some(
+          (block) => Number(block.userID) === id && this.doDateRangesOverlap(window.start, window.end, block.start, block.end)
+        );
+
+        map[id] = {
+          available: !unavailable,
+          subtitle: unavailable ? "Marked unavailable for this shift." : "Available for this shift.",
+        };
+        return map;
+      }, {});
+    },
+
+    availableWorkerItems() {
+      return this.workerItems.filter((item) => item.available);
+    },
+
+    unavailableWorkerItems() {
+      return this.workerItems.filter((item) => !item.available);
+    },
+
+    shiftDialogAvailabilitySummary() {
+      if (!this.shiftDialogWindow) {
+        return "Set the shift date and time to see worker availability.";
+      }
+
+      return `${this.availableWorkerItems.length} available, ${this.unavailableWorkerItems.length} unavailable`;
+    },
+
+    availableWorkerNamesText() {
+      if (!this.shiftDialogWindow) {
+        return "Set the shift date and time first.";
+      }
+
+      return this.availableWorkerItems.length
+        ? this.availableWorkerItems.map((item) => item.label).join(", ")
+        : "None";
+    },
+
+    unavailableWorkerNamesText() {
+      if (!this.shiftDialogWindow) {
+        return "Set the shift date and time first.";
+      }
+
+      return this.unavailableWorkerItems.length
+        ? this.unavailableWorkerItems.map((item) => item.label).join(", ")
+        : "None";
+    },
+
+    tasklistItems() {
+      return this.tasklists.map((tasklist) => ({
+        value: tasklist.ID,
+        label: tasklist.name || `Tasklist ${tasklist.ID}`,
+      }));
     },
 
     calendarEvents() {
       return this.filteredShifts.map((shift) => {
         const shiftID = shift.ID;
         const assignments = this.userShiftAssignmentsByShiftID[shiftID] || [];
+        const tasklistCount = (this.shiftTaskListsByShiftID[shiftID] || []).length;
         const workerNames = assignments
           .map((a) => {
             const userID = Number(a.userID);
@@ -659,6 +804,9 @@ export default {
           assignedCount > 0
             ? `${positionTitle} (${assignedCount}/${required}) - ${workerNames}`
             : `${positionTitle} (0/${required}) - Unassigned`;
+        const titleWithTasklists = tasklistCount
+          ? `${title} | ${tasklistCount} tasklist${tasklistCount === 1 ? "" : "s"}`
+          : title;
 
         const color =
           assignedCount === 0
@@ -667,7 +815,7 @@ export default {
 
         return {
           id: String(shift.ID),
-          title,
+          title: titleWithTasklists,
           start: `${shift.shift_date}T${this.toHHMM(shift.start_time)}:00`,
           end: `${shift.shift_date}T${this.toHHMM(shift.end_time)}:00`,
           color,
@@ -804,6 +952,19 @@ export default {
       if (normalized === "official") return "Active";
       return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : "";
     },
+    toHMS(value, fallback = "00:00:00") {
+      return String(value || fallback).slice(0, 8);
+    },
+
+    normalizeResponseArray(response, keys = []) {
+      if (Array.isArray(response)) return response;
+      for (const key of keys) {
+        if (Array.isArray(response?.[key])) return response[key];
+      }
+      if (Array.isArray(response?.data)) return response.data;
+      return [];
+    },
+
 
     jumpCalendarToDate(dateStr) {
       if (!dateStr) return;
@@ -817,6 +978,55 @@ export default {
     normalizeUserID(raw) {
       const id = Number(raw);
       return Number.isFinite(id) && id > 0 ? id : null;
+    },
+
+    normalizeUnavailabilityBlock(rawBlock) {
+      const userID = this.normalizeUserID(rawBlock?.userID ?? rawBlock?.user?.userID ?? rawBlock?.user?.ID);
+      const startDate = rawBlock?.start_date;
+      const endDate = rawBlock?.end_date;
+      const startTime = this.toHMS(rawBlock?.start_time, "00:00:00");
+      const endTime = this.toHMS(rawBlock?.end_time, "23:59:59");
+
+      return {
+        id: rawBlock?.ID ?? rawBlock?.id,
+        userID,
+        start: new Date(`${startDate}T${startTime}`),
+        end: new Date(`${endDate}T${endTime}`),
+      };
+    },
+
+    async loadUnavailability() {
+      const workerIDs = new Set(
+        Object.keys(this.workersByID)
+          .map((key) => Number(key))
+          .filter((id) => Number.isFinite(id) && id > 0)
+      );
+
+      if (!workerIDs.size) {
+        this.unavailabilityBlocks = [];
+        return;
+      }
+
+      try {
+        const response = await unavailableServices.getAll({ limit: 1000 });
+        const rows = this.normalizeResponseArray(response, ["unavailabilities"]);
+        this.unavailabilityBlocks = rows
+          .map((row) => this.normalizeUnavailabilityBlock(row))
+          .filter((block) => block.id && workerIDs.has(Number(block.userID)));
+      } catch (error) {
+        console.error("Failed to load worker unavailability:", error);
+        this.unavailabilityBlocks = [];
+      }
+    },
+
+    doDateRangesOverlap(rangeStart, rangeEnd, blockStart, blockEnd) {
+      const start = rangeStart instanceof Date ? rangeStart.getTime() : new Date(rangeStart).getTime();
+      const end = rangeEnd instanceof Date ? rangeEnd.getTime() : new Date(rangeEnd).getTime();
+      const blockStartTime = blockStart instanceof Date ? blockStart.getTime() : new Date(blockStart).getTime();
+      const blockEndTime = blockEnd instanceof Date ? blockEnd.getTime() : new Date(blockEnd).getTime();
+
+      if ([start, end, blockStartTime, blockEndTime].some((value) => Number.isNaN(value))) return false;
+      return start < blockEndTime && blockStartTime < end;
     },
 
     getCurrentUser() {
@@ -1247,7 +1457,7 @@ export default {
         for (const s of templateShifts) {
           const original = new Date(`${s.shift_date}T00:00:00`);
           const shifted = this.addDays(original, dayOffset);
-          await shiftServices.create({
+          const createdShift = await shiftServices.create({
             shift_date: this.toISODate(shifted),
             start_time: this.toHHMM(s.start_time),
             end_time: this.toHHMM(s.end_time),
@@ -1255,6 +1465,14 @@ export default {
             scheduleID: newScheduleID,
             positionID: s.positionID || null,
           });
+          const createdShiftID = createdShift?.ID ?? createdShift?.id ?? createdShift?.data?.ID;
+          if (createdShiftID) {
+            const sourceTasklists = await shiftTaskListServices.getAll({ shiftID: s.ID });
+            const selectedTaskListIDs = Array.isArray(sourceTasklists)
+              ? sourceTasklists.map((row) => row.task_listID)
+              : [];
+            await this.syncShiftTasklists(createdShiftID, selectedTaskListIDs);
+          }
         }
 
         await this.loadSchedules();
@@ -1302,7 +1520,14 @@ export default {
         }
 
         const restoredState = this.restoreSessionState();
-        await Promise.all([this.loadWorkers(), this.loadPositions(), this.loadManagerSettings(), this.loadSchedules()]);
+        await Promise.all([
+          this.loadWorkers(),
+          this.loadPositions(),
+          this.loadTasklists(),
+          this.loadManagerSettings(),
+          this.loadSchedules(),
+        ]);
+        await this.loadUnavailability();
 
         const routeScheduleID = Number(this.$route?.query?.scheduleID);
         const routeTemplateID = Number(this.$route?.query?.templateID);
@@ -1353,6 +1578,37 @@ export default {
       }
     },
 
+    async syncShiftTasklists(shiftID, selectedTaskListIDs = []) {
+      const currentRows = await shiftTaskListServices.getAll({ shiftID });
+      const existingRows = Array.isArray(currentRows) ? currentRows : [];
+      const existingIDs = new Set(existingRows.map((row) => String(row.task_listID)));
+      const nextIDs = new Set(
+        selectedTaskListIDs
+          .map((id) => Number(id))
+          .filter((id) => Number.isFinite(id) && id > 0)
+          .map((id) => String(id))
+      );
+
+      const tasklistIDsToAdd = [...nextIDs].filter((id) => !existingIDs.has(id));
+      const tasklistRowsToRemove = existingRows.filter(
+        (row) => !nextIDs.has(String(row.task_listID))
+      );
+
+      await Promise.all([
+        ...tasklistIDsToAdd.map((taskListID) =>
+          shiftTaskListServices.create({
+            shiftID,
+            task_listID: Number(taskListID),
+          })
+        ),
+        ...tasklistRowsToRemove.map((row) =>
+          row.ID
+            ? shiftTaskListServices.delete(row.ID)
+            : shiftTaskListServices.deleteByPair(shiftID, row.task_listID)
+        ),
+      ]);
+    },
+
     async loadWorkers() {
       const linksRes = await departmentUsersServices.getByDepartment(this.managerDepartmentID);
       const links = Array.isArray(linksRes)
@@ -1398,6 +1654,11 @@ export default {
       ) {
         this.selectedPositionFilter = "all";
       }
+    },
+
+    async loadTasklists() {
+      const res = await taskListServices.getAll({ departmentID: this.managerDepartmentID });
+      this.tasklists = Array.isArray(res) ? res : [];
     },
 
     async loadSchedules() {
@@ -1599,13 +1860,17 @@ export default {
       if (!this.selectedScheduleID) {
         this.shifts = [];
         this.userShiftAssignmentsByShiftID = {};
+        this.shiftTaskListsByShiftID = {};
         return;
       }
 
       const shifts = await shiftServices.getAll({ scheduleID: this.selectedScheduleID });
       this.shifts = Array.isArray(shifts) ? shifts : [];
 
-      await Promise.all(this.shifts.map((shift) => this.loadAssignmentsForShift(shift.ID)));
+      await Promise.all([
+        ...this.shifts.map((shift) => this.loadAssignmentsForShift(shift.ID)),
+        ...this.shifts.map((shift) => this.loadTasklistsForShift(shift.ID)),
+      ]);
       this.$nextTick(() => this.$refs.managerCalendar?.updateSize());
     },
 
@@ -1615,10 +1880,6 @@ export default {
         rows = await userShiftServices.getAll({ shiftID });
       } catch (e) {
         console.error("Failed to load shift assignments:", e);
-        this.showMessage(
-          e?.response?.data?.message || "Could not load shift assignments.",
-          "warning"
-        );
       }
       this.userShiftAssignmentsByShiftID = {
         ...this.userShiftAssignmentsByShiftID,
@@ -1640,6 +1901,24 @@ export default {
           this.$refs.managerCalendar?.getCurrentDate?.() ||
           this.currentCalendarSchedule?.start_date ||
           this.toISODate(new Date());
+    async loadTasklistsForShift(shiftID) {
+      let rows = [];
+      try {
+        rows = await shiftTaskListServices.getAll({ shiftID });
+      } catch (e) {
+        console.error("Failed to load shift tasklists:", e);
+      }
+      this.shiftTaskListsByShiftID = {
+        ...this.shiftTaskListsByShiftID,
+        [shiftID]: Array.isArray(rows) ? rows : [],
+      };
+    },
+
+    async openCreateShiftModal(selection) {
+      if (!this.selectedScheduleID) {
+        this.showMessage("Create or select a schedule first.", "warning");
+        return;
+      }
 
         start = new Date(`${selectedDate}T09:00:00`);
         end = new Date(`${selectedDate}T10:00:00`);
@@ -1654,7 +1933,10 @@ export default {
         workers_required: Number(this.managerSettings.default_shift_workers_required) || 1,
         positionID: null,
         assignedWorkerIDs: [],
+        selectedTaskListIDs: [],
       };
+
+      await this.loadUnavailability();
       this.shiftDialog.open = true;
     },
 
@@ -1665,8 +1947,13 @@ export default {
       const shift = this.shifts.find((s) => Number(s.ID) === shiftID);
       if (!shift) return;
 
-      await this.loadAssignmentsForShift(shiftID);
+      await Promise.all([
+        this.loadAssignmentsForShift(shiftID),
+        this.loadTasklistsForShift(shiftID),
+        this.loadUnavailability(),
+      ]);
       const assignments = this.userShiftAssignmentsByShiftID[shiftID] || [];
+      const tasklistLinks = this.shiftTaskListsByShiftID[shiftID] || [];
 
       this.shiftDialog.mode = "edit";
       this.shiftDialog.shiftID = shiftID;
@@ -1677,6 +1964,7 @@ export default {
         workers_required: shift.workers_required || 1,
         positionID: shift.positionID,
         assignedWorkerIDs: assignments.map((a) => a.userID),
+        selectedTaskListIDs: tasklistLinks.map((link) => link.task_listID),
       };
       this.shiftDialog.open = true;
     },
@@ -1737,8 +2025,11 @@ export default {
 
           await this.loadShiftsForSelectedSchedule();
           this.closeShiftDialog();
+          emitNotificationRefresh();
           return;
         }
+
+        await this.syncShiftTasklists(shiftID, form.selectedTaskListIDs);
 
         const existing = await userShiftServices.getAll({ shiftID });
         const existingRows = Array.isArray(existing) ? existing : [];
@@ -1793,7 +2084,12 @@ export default {
 
         await this.loadShiftsForSelectedSchedule();
         this.closeShiftDialog();
-
+        emitNotificationRefresh();
+        if (assignmentErrors.length > 0) {
+          this.showMessage(`Shift saved, but assignments failed: ${assignmentErrors[0]}`, "warning");
+        } else {
+          this.showMessage("Shift saved.");
+        }
       } catch (e) {
         console.error(e);
         const message =
@@ -1815,6 +2111,8 @@ export default {
         await shiftServices.delete(this.shiftDialog.shiftID);
         await this.loadShiftsForSelectedSchedule();
         this.closeShiftDialog();
+        emitNotificationRefresh();
+        this.showMessage("Shift deleted.");
       } catch (e) {
         console.error(e);
         this.showMessage("Failed to delete shift.", "error");
