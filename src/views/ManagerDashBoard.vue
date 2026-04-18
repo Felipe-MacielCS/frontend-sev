@@ -62,6 +62,7 @@
             density="compact"
             hide-details
             class="mb-3"
+            :menu-props="selectMenuProps"
             @update:modelValue="onScheduleSelected"
           />
 
@@ -84,32 +85,10 @@
               variant="outlined"
               density="compact"
               hide-details
-              class="mb-2"
-            />
-
-            <v-select
-              v-model="scheduleEditor.type"
-              :items="editableScheduleTypeOptions"
-              item-title="label"
-              item-value="value"
-              label="Schedule Type"
-              variant="outlined"
-              density="compact"
-              hide-details
               class="mb-3"
             />
 
             <div class="d-flex ga-2">
-              <v-btn
-                size="default"
-                color="primary"
-                variant="tonal"
-                :disabled="selectedSchedule?.type === 'official'"
-                :loading="isUpdatingSchedule"
-                @click="setSelectedScheduleActive"
-              >
-                {{ selectedSchedule?.type === "official" ? "Active" : "Set as Active" }}
-              </v-btn>
               <v-btn
                 size="default"
                 color="primary"
@@ -154,6 +133,7 @@
             density="compact"
             hide-details
             class="mb-3"
+            :menu-props="selectMenuProps"
             @update:modelValue="onTemplateSelected"
           />
 
@@ -191,6 +171,7 @@
             density="compact"
             hide-details
             class="mb-3"
+            :menu-props="selectMenuProps"
           />
 
           <v-text-field
@@ -227,7 +208,7 @@
 
         <v-card class="pa-4 bg-grey-lighten-3" elevation="1">
           <div class="d-flex align-center justify-space-between mb-3">
-            <h3 class="text-subtitle-1 font-weight-bold">Health Check</h3>
+            <h3 class="text-subtitle-1 font-weight-bold">Schedule Snapshot</h3>
             <v-icon color="primary">mdi-radar</v-icon>
           </div>
 
@@ -270,12 +251,6 @@
                 >
                   {{ currentCalendarScheduleTypeLabel }}
                 </v-chip>
-                <v-chip size="small" variant="tonal" color="teal">
-                  {{ shifts.length }} shifts
-                </v-chip>
-                <v-chip size="small" variant="outlined" color="error">
-                  {{ unassignedShiftCount }} unassigned
-                </v-chip>
               </div>
             </div>
 
@@ -297,29 +272,10 @@
                   v-if="activePanel === 'schedules' && selectedSchedule"
                   color="primary"
                   variant="tonal"
-                  :disabled="selectedSchedule?.type === 'official'"
                   :loading="isUpdatingSchedule"
-                  @click="setSelectedScheduleActive"
+                  @click="toggleSelectedScheduleActive"
                 >
-                  {{ selectedSchedule?.type === "official" ? "Active" : "Set as Active" }}
-                </v-btn>
-                <v-btn
-                  v-if="activePanel === 'schedules' && selectedSchedule"
-                  color="primary"
-                  variant="tonal"
-                  :loading="isUpdatingSchedule"
-                  @click="updateSelectedScheduleMeta"
-                >
-                  Save
-                </v-btn>
-                <v-btn
-                  v-if="activePanel === 'schedules' && selectedSchedule"
-                  color="error"
-                  variant="tonal"
-                  :loading="isDeletingSchedule"
-                  @click="deleteSelectedSchedule"
-                >
-                  Delete
+                  {{ selectedSchedule?.type === "official" ? "Deactivate" : "Set as Active" }}
                 </v-btn>
                 <v-btn
                   v-if="activePanel === 'templates' && templateApply.templateScheduleID"
@@ -354,7 +310,7 @@
       </v-col>
     </v-row>
 
-    <v-dialog v-model="createScheduleDialog" max-width="640">
+    <v-dialog v-model="createScheduleDialog" max-width="640" eager>
       <v-card>
         <v-card-title class="text-h6">Create Schedule</v-card-title>
         <v-card-text>
@@ -368,6 +324,7 @@
                 item-value="value"
                 variant="outlined"
                 density="comfortable"
+                :menu-props="selectMenuProps"
               />
             </v-col>
             <v-col cols="12" sm="6">
@@ -379,6 +336,7 @@
                 item-value="value"
                 variant="outlined"
                 density="comfortable"
+                :menu-props="selectMenuProps"
               />
             </v-col>
           </v-row>
@@ -446,7 +404,7 @@
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="shiftDialog.open" max-width="640">
+    <v-dialog v-model="shiftDialog.open" max-width="640" eager>
       <v-card>
         <v-card-title class="text-h6">
           {{ shiftDialog.mode === "create" ? "Create Shift" : "Edit Shift" }}
@@ -503,6 +461,7 @@
                 label="Position"
                 variant="outlined"
                 density="comfortable"
+                :menu-props="selectMenuProps"
               />
             </v-col>
             <v-col cols="12" sm="6">
@@ -529,6 +488,7 @@
             chips
             closable-chips
             class="mt-1"
+            :menu-props="selectMenuProps"
           />
 
           <v-select
@@ -593,6 +553,7 @@ import userServices from "../services/userServices.js";
 import positionServices from "../services/positionServices.js";
 import settingsServices from "../services/settingsServices.js";
 import settingsValuesServices from "../services/settingsValuesServices.js";
+import { emitNotificationRefresh } from "../services/notificationSync.js";
 
 const SESSION_STORAGE_KEY = "manager-schedule-page-state-v1";
 
@@ -683,6 +644,13 @@ export default {
         show: false,
         message: "",
         color: "success",
+      },
+      selectMenuProps: {
+        attach: "body",
+        location: "bottom start",
+        locationStrategy: "connected",
+        origin: "auto",
+        maxHeight: 280,
       },
     };
   },
@@ -1173,7 +1141,6 @@ export default {
         this.isUpdatingSchedule = true;
         const payload = {
           name: String(this.scheduleEditor.name || "").trim() || null,
-          type: this.scheduleEditor.type,
         };
         const res = await scheduleServices.update(this.selectedScheduleID, payload);
         const updated = res?.data || null;
@@ -1192,11 +1159,12 @@ export default {
       }
     },
 
-    async setSelectedScheduleActive() {
-      if (!this.selectedScheduleID || this.selectedSchedule?.type === "official") return;
+    async toggleSelectedScheduleActive() {
+      if (!this.selectedScheduleID) return;
       try {
         this.isUpdatingSchedule = true;
-        const res = await scheduleServices.update(this.selectedScheduleID, { type: "official" });
+        const nextType = this.selectedSchedule?.type === "official" ? "draft" : "official";
+        const res = await scheduleServices.update(this.selectedScheduleID, { type: nextType });
         const updated = res?.data || null;
         const keepSelectedID = this.selectedScheduleID;
         await this.loadSchedules();
@@ -1204,10 +1172,16 @@ export default {
         await this.loadShiftsForSelectedSchedule();
         this.jumpCalendarToDate(updated?.start_date || this.selectedSchedule?.start_date);
         this.refreshScheduleEditorFromSelected();
-        this.showMessage("Schedule set as active.");
+        this.showMessage(
+          nextType === "official" ? "Schedule set as active." : "Schedule deactivated."
+        );
       } catch (e) {
         console.error(e);
-        this.showMessage(e?.response?.data?.message || "Failed to set schedule as active.", "error");
+        this.showMessage(
+          e?.response?.data?.message ||
+            "Failed to update the schedule active status.",
+          "error"
+        );
       } finally {
         this.isUpdatingSchedule = false;
       }
@@ -1779,6 +1753,7 @@ export default {
           this.showMessage("Shift saved but shift ID was not returned.", "warning");
           await this.loadShiftsForSelectedSchedule();
           this.closeShiftDialog();
+          emitNotificationRefresh();
           return;
         }
 
@@ -1837,6 +1812,7 @@ export default {
 
         await this.loadShiftsForSelectedSchedule();
         this.closeShiftDialog();
+        emitNotificationRefresh();
         if (assignmentErrors.length > 0) {
           this.showMessage(`Shift saved, but assignments failed: ${assignmentErrors[0]}`, "warning");
         } else {
@@ -1863,6 +1839,7 @@ export default {
         await shiftServices.delete(this.shiftDialog.shiftID);
         await this.loadShiftsForSelectedSchedule();
         this.closeShiftDialog();
+        emitNotificationRefresh();
         this.showMessage("Shift deleted.");
       } catch (e) {
         console.error(e);

@@ -99,6 +99,7 @@
           <v-tabs v-model="viewDialog.tab" color="primary" class="manager-user-tabs">
             <v-tab value="info">Info</v-tab>
             <v-tab value="calendar">Calendar</v-tab>
+            <v-tab value="clock-history">Clock History</v-tab>
           </v-tabs>
 
           <!-- Body -->
@@ -164,6 +165,51 @@
                 </v-alert>
 
               </v-window-item>
+
+              <v-window-item value="clock-history">
+                <div class="d-flex align-center justify-space-between mb-3">
+                  <div class="text-subtitle-2 font-weight-bold">Clock History</div>
+                  <v-btn variant="text" :loading="clockHistory.loading" @click="reloadClockHistoryForDialog('view')">
+                    Refresh
+                  </v-btn>
+                </div>
+
+                <v-alert v-if="clockHistory.error" type="error" variant="tonal" class="mb-3">
+                  {{ clockHistory.error }}
+                </v-alert>
+
+                <v-alert
+                  v-else-if="!clockHistory.loading && !clockHistory.records.length"
+                  type="info"
+                  variant="tonal"
+                  class="mb-3"
+                >
+                  No clock history found for this worker yet.
+                </v-alert>
+
+                <div v-else class="clock-history-table-wrap">
+                  <v-table>
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Shift</th>
+                        <th>Clock In</th>
+                        <th>Clock Out</th>
+                        <th>Time Worked</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="record in clockHistory.records" :key="record.id">
+                        <td>{{ record.shiftDate }}</td>
+                        <td>{{ record.shiftLabel }}</td>
+                        <td>{{ formatClockDateTime(record.clockInTime) }}</td>
+                        <td>{{ record.clockOutTime ? formatClockDateTime(record.clockOutTime) : "Active" }}</td>
+                        <td>{{ formatWorkedDuration(record.clockInTime, record.clockOutTime) }}</td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                </div>
+              </v-window-item>
             </v-window>
           </div>
 
@@ -186,6 +232,7 @@
       <v-tabs v-model="editDialog.tab" color="primary" class="manager-user-tabs">
         <v-tab value="info">Info</v-tab>
         <v-tab value="calendar">Calendar</v-tab>
+        <v-tab value="clock-history">Clock History</v-tab>
       </v-tabs>
 
       <v-alert
@@ -216,7 +263,7 @@
                   color="#8b1e1e"
                 >
                   <v-radio label="Active" value="active" />
-                  <v-radio label="Deactive" value="inactive" />
+                  <v-radio label="Inactive" value="inactive" />
                 </v-radio-group>
               </div>
 
@@ -271,6 +318,51 @@
             >
               No events to display with the current filters.
             </v-alert>
+          </v-window-item>
+
+          <v-window-item value="clock-history">
+            <div class="d-flex align-center justify-space-between mb-3">
+              <div class="text-subtitle-2 font-weight-bold">Clock History</div>
+              <v-btn variant="text" :loading="clockHistory.loading" @click="reloadClockHistoryForDialog('edit')">
+                Refresh
+              </v-btn>
+            </div>
+
+            <v-alert v-if="clockHistory.error" type="error" variant="tonal" class="mb-3">
+              {{ clockHistory.error }}
+            </v-alert>
+
+            <v-alert
+              v-else-if="!clockHistory.loading && !clockHistory.records.length"
+              type="info"
+              variant="tonal"
+              class="mb-3"
+            >
+              No clock history found for this worker yet.
+            </v-alert>
+
+            <div v-else class="clock-history-table-wrap">
+              <v-table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Shift</th>
+                    <th>Clock In</th>
+                    <th>Clock Out</th>
+                    <th>Time Worked</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="record in clockHistory.records" :key="record.id">
+                    <td>{{ record.shiftDate }}</td>
+                    <td>{{ record.shiftLabel }}</td>
+                    <td>{{ formatClockDateTime(record.clockInTime) }}</td>
+                    <td>{{ record.clockOutTime ? formatClockDateTime(record.clockOutTime) : "Active" }}</td>
+                    <td>{{ formatWorkedDuration(record.clockInTime, record.clockOutTime) }}</td>
+                  </tr>
+                </tbody>
+              </v-table>
+            </div>
           </v-window-item>
         </v-window>
       </div>
@@ -454,6 +546,7 @@ import userPostionServices from "../services/userPostionServices.js";
 import userShiftServices from "../services/userShiftServices.js";
 import shiftServices from "../services/shiftServices.js";
 import scheduleServices from "../services/scheduleServices.js";
+import clockInOutServices from "../services/clockInOutServices.js";
 import UserCalendar from "../components/UserCalendar.vue";
 
 export default {
@@ -515,6 +608,11 @@ export default {
 
       // all events for the selected user (unavailability + shifts)
       userCalendarEvents: [],
+      clockHistory: {
+        loading: false,
+        error: "",
+        records: [],
+      },
     };
   },
 
@@ -562,6 +660,9 @@ export default {
       if (tab === "calendar") {
         this.$nextTick(() => setTimeout(() => this.$refs.userCalendar?.updateSize(), 100));
       }
+      if (tab === "clock-history" && this.viewDialog.user) {
+        this.loadClockHistoryForUser(this.viewDialog.user);
+      }
     },
     "editDialog.open"(open) {
       if (open) {
@@ -571,6 +672,9 @@ export default {
     "editDialog.tab"(tab) {
       if (tab === "calendar") {
         this.$nextTick(() => setTimeout(() => this.$refs.editUserCalendar?.updateSize(), 100));
+      }
+      if (tab === "clock-history" && this.editDialog.user) {
+        this.loadClockHistoryForUser(this.editDialog.user);
       }
     },
     filteredUserCalendarEvents() {
@@ -870,6 +974,7 @@ export default {
       this.viewDialog.open = false;
       this.viewDialog.user = null;
       this.userCalendarEvents = [];
+      this.resetClockHistory();
     },
 
     async openEditUserDialog(user) {
@@ -893,6 +998,85 @@ export default {
         status: "active",
         positionIDs: [],
       };
+      this.resetClockHistory();
+    },
+    resetClockHistory() {
+      this.clockHistory = {
+        loading: false,
+        error: "",
+        records: [],
+      };
+    },
+    formatClockDateTime(value) {
+      if (!value) return "-";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return date.toLocaleString();
+    },
+    formatWorkedDuration(clockInTime, clockOutTime) {
+      if (!clockInTime) return "-";
+      const start = new Date(clockInTime);
+      const end = clockOutTime ? new Date(clockOutTime) : new Date();
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return "-";
+
+      const totalMinutes = Math.max(0, Math.round((end - start) / 60000));
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+    },
+    async loadClockHistoryForUser(user) {
+      const userID = this.getUserId(user);
+      if (!userID) return;
+
+      this.clockHistory = {
+        loading: true,
+        error: "",
+        records: [],
+      };
+
+      try {
+        const assignmentsRes = await userShiftServices.getAll({ userID });
+        const assignments = Array.isArray(assignmentsRes) ? assignmentsRes : [];
+
+        const historyRows = await Promise.all(
+          assignments.map(async (assignment) => {
+            const userShiftID = this.getUserId({ ID: assignment?.ID });
+            const shiftID = Number(assignment?.shiftID);
+            if (!userShiftID || !Number.isFinite(shiftID)) return [];
+
+            const [shift, clockRecords] = await Promise.all([
+              shiftServices.get(shiftID),
+              clockInOutServices.getByUserShift(userShiftID),
+            ]);
+
+            const rows = Array.isArray(clockRecords) ? clockRecords : [];
+            return rows.map((record) => ({
+              id: record.ID,
+              shiftDate: shift?.shift_date || "Unknown date",
+              shiftLabel: `${String(shift?.start_time || "").slice(0, 5)} - ${String(shift?.end_time || "").slice(0, 5)}`,
+              clockInTime: record.clock_in_time,
+              clockOutTime: record.clock_out_time,
+            }));
+          })
+        );
+
+        this.clockHistory = {
+          loading: false,
+          error: "",
+          records: historyRows.flat().sort((a, b) => new Date(b.clockInTime) - new Date(a.clockInTime)),
+        };
+      } catch (error) {
+        console.error("Failed to load clock history:", error?.response?.data || error);
+        this.clockHistory = {
+          loading: false,
+          error: error?.response?.data?.message || "Failed to load clock history.",
+          records: [],
+        };
+      }
+    },
+    async reloadClockHistoryForDialog(source) {
+      const user = source === "edit" ? this.editDialog.user : this.viewDialog.user;
+      await this.loadClockHistoryForUser(user);
     },
 
     async saveEditUserDialog() {

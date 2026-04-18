@@ -20,6 +20,15 @@
 
     <v-spacer></v-spacer>
 
+    <NotificationMenuButton
+      :items="notifications"
+      :loading="notificationsLoading"
+      title="Notifications"
+      empty-text="No manager notifications right now."
+      button-label="Open manager notifications"
+      icon="mdi-bell-outline"
+    />
+
     <v-btn icon="mdi-cog" variant="text" class="mr-1" to="/manager/settings"></v-btn>
   </v-app-bar>
 
@@ -52,16 +61,59 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from "vue";
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useRoute } from "vue-router";
+import NotificationMenuButton from "./NotificationMenuButton.vue";
+import { getManagerNotificationFeed } from "../services/notificationFeedServices.js";
+import { subscribeToNotificationRefresh } from "../services/notificationSync.js";
 
 const DRAWER_STORAGE_KEY = "manager_nav_drawer_open";
+const NOTIFICATION_POLL_MS = 5000;
 const drawer = ref(true);
+const route = useRoute();
+const notifications = ref([]);
+const notificationsLoading = ref(false);
+let notificationInterval = null;
+let unsubscribeNotificationRefresh = null;
+
+const normalizeID = (raw) => {
+  const id = Number(raw);
+  return Number.isFinite(id) && id > 0 ? id : null;
+};
+
+const getCurrentUser = () => {
+  const raw = localStorage.getItem("user");
+  const stored = raw ? JSON.parse(raw) : null;
+  return stored?.user ?? stored ?? null;
+};
+
+const loadNotifications = async () => {
+  try {
+    notificationsLoading.value = true;
+    const user = getCurrentUser();
+    const managerID = normalizeID(user?.ID ?? user?.id ?? user?.userID);
+    notifications.value = managerID ? await getManagerNotificationFeed(managerID) : [];
+  } catch (error) {
+    console.error("Failed to load manager notifications:", error?.response?.data || error);
+    notifications.value = [];
+  } finally {
+    notificationsLoading.value = false;
+  }
+};
+
+const handleNotificationRefresh = () => {
+  loadNotifications();
+};
 
 onMounted(() => {
   const savedDrawerState = localStorage.getItem(DRAWER_STORAGE_KEY);
   if (savedDrawerState !== null) {
     drawer.value = savedDrawerState === "1";
   }
+
+  loadNotifications();
+  notificationInterval = window.setInterval(loadNotifications, NOTIFICATION_POLL_MS);
+  unsubscribeNotificationRefresh = subscribeToNotificationRefresh(handleNotificationRefresh);
 });
 
 watch(drawer, (isOpen) => {
@@ -73,6 +125,24 @@ watch(drawer, (isOpen) => {
   );
 });
 
+watch(
+  () => route.path,
+  () => {
+    loadNotifications();
+  }
+);
+
+onBeforeUnmount(() => {
+  if (notificationInterval) {
+    window.clearInterval(notificationInterval);
+    notificationInterval = null;
+  }
+  if (unsubscribeNotificationRefresh) {
+    unsubscribeNotificationRefresh();
+    unsubscribeNotificationRefresh = null;
+  }
+});
+
 const navItems = [
   { title: "Templates", to: "/manager/templates", icon: "mdi-file-document-outline" },
   { title: "Schedule", to: "/manager", icon: "mdi-calendar-month-outline" },
@@ -81,7 +151,7 @@ const navItems = [
   { title: "Trade Board", to: "/manager/tradeboard", icon: "mdi-swap-horizontal" },
   { title: "Tasklists", to: "/manager/tasklists", icon: "mdi-format-list-bulleted" },
   { title: "Announcements", to: "/manager/announcements", icon: "mdi-bullhorn-outline" },
-  { title: "Availability", to: "/manager/availability", icon: "mdi-calendar-clock-outline" },
+  { title: "Unvailability", to: "/manager/availability", icon: "mdi-calendar-clock-outline" },
   { title: "Settings", to: "/manager/settings", icon: "mdi-cog-outline" },
 ];
 </script>
