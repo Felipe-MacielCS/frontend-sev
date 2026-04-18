@@ -489,7 +489,24 @@
             closable-chips
             class="mt-1"
             :menu-props="selectMenuProps"
-          />
+            :hint="shiftDialogAvailabilitySummary"
+            persistent-hint
+          >
+
+            <template #item="{ props, item }">
+              <v-list-item v-bind="props" :subtitle="item.raw.subtitle">
+                <template #append>
+                  <v-chip
+                    :color="item.raw.available ? 'success' : 'warning'"
+                    size="x-small"
+                    variant="tonal"
+                  >
+                    {{ item.raw.available ? "Available" : "Unavailable" }}
+                  </v-chip>
+                </template>
+              </v-list-item>
+            </template>
+          </v-select>
 
           <v-select
             v-model="shiftDialog.form.selectedTaskListIDs"
@@ -553,6 +570,7 @@ import userServices from "../services/userServices.js";
 import positionServices from "../services/positionServices.js";
 import settingsServices from "../services/settingsServices.js";
 import settingsValuesServices from "../services/settingsValuesServices.js";
+import unavailableServices from "../services/unavailableServices.js";
 import { emitNotificationRefresh } from "../services/notificationSync.js";
 
 const SESSION_STORAGE_KEY = "manager-schedule-page-state-v1";
@@ -611,6 +629,7 @@ export default {
       workersByID: {},
       positionsByID: {},
       tasklists: [],
+      unavailabilityBlocks: [],
       managerSettings: {
         schedule_week_starts_monday: false,
         default_shift_workers_required: 1,
@@ -772,15 +791,114 @@ export default {
     },
 
     workerItems() {
+      const availabilityByWorkerID = this.shiftDialogAvailabilityByWorkerID;
       const list = Object.values(this.workersByID);
+
       return list
         .map((w) => {
           const id = Number(w.ID ?? w.userID ?? w.id);
           if (!Number.isFinite(id) || id <= 0) return null;
-          return { value: id, label: w.name || `Worker ${id}` };
+
+          const label = w.name || `Worker ${id}`;
+          const availability = availabilityByWorkerID[id] || {
+            available: true,
+            subtitle: "Set the shift date and time to check availability.",
+          };
+
+          return {
+            value: id,
+            label,
+            available: availability.available,
+            subtitle: availability.subtitle,
+          };
         })
-        .filter(Boolean);
+        .filter(Boolean)
+        .sort((a, b) => {
+          if (a.available !== b.available) return a.available ? -1 : 1;
+          return a.label.localeCompare(b.label);
+        });
     },
+
+    shiftDialogWindow() {
+      const shiftDate = this.shiftDialog?.form?.shift_date;
+      const startTime = this.toHHMM(this.shiftDialog?.form?.start_time);
+      const endTime = this.toHHMM(this.shiftDialog?.form?.end_time);
+
+      if (!shiftDate || !startTime || !endTime) return null;
+
+      const start = new Date(`${shiftDate}T${startTime}:00`);
+      const end = new Date(`${shiftDate}T${endTime}:00`);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) {
+        return null;
+      }
+
+      return { start, end };
+    },
+
+    shiftDialogAvailabilityByWorkerID() {
+      const window = this.shiftDialogWindow;
+      const blocks = Array.isArray(this.unavailabilityBlocks) ? this.unavailabilityBlocks : [];
+
+      return Object.values(this.workersByID).reduce((map, worker) => {
+        const id = Number(worker.ID ?? worker.userID ?? worker.id);
+        if (!Number.isFinite(id) || id <= 0) return map;
+
+        if (!window) {
+          map[id] = {
+            available: true,
+            subtitle: "Set the shift date and time to check availability.",
+          };
+          return map;
+        }
+
+        const unavailable = blocks.some(
+          (block) => Number(block.userID) === id && this.doDateRangesOverlap(window.start, window.end, block.start, block.end)
+        );
+
+        map[id] = {
+          available: !unavailable,
+          subtitle: unavailable ? "Marked unavailable for this shift." : "Available for this shift.",
+        };
+        return map;
+      }, {});
+    },
+
+    availableWorkerItems() {
+      return this.workerItems.filter((item) => item.available);
+    },
+
+    unavailableWorkerItems() {
+      return this.workerItems.filter((item) => !item.available);
+    },
+
+    shiftDialogAvailabilitySummary() {
+      if (!this.shiftDialogWindow) {
+        return "Set the shift date and time to see worker availability.";
+      }
+
+      return `${this.availableWorkerItems.length} available, ${this.unavailableWorkerItems.length} unavailable`;
+    },
+
+    availableWorkerNamesText() {
+      if (!this.shiftDialogWindow) {
+        return "Set the shift date and time first.";
+      }
+
+      return this.availableWorkerItems.length
+        ? this.availableWorkerItems.map((item) => item.label).join(", ")
+        : "None";
+    },
+
+    unavailableWorkerNamesText() {
+      if (!this.shiftDialogWindow) {
+        return "Set the shift date and time first.";
+      }
+
+      return this.unavailableWorkerItems.length
+        ? this.unavailableWorkerItems.map((item) => item.label).join(", ")
+        : "None";
+    },
+
     tasklistItems() {
       return this.tasklists.map((tasklist) => ({
         value: tasklist.ID,
@@ -926,6 +1044,20 @@ export default {
       return String(value).slice(0, 5);
     },
 
+    toHMS(value, fallback = "00:00:00") {
+      return String(value || fallback).slice(0, 8);
+    },
+
+    normalizeResponseArray(response, keys = []) {
+      if (Array.isArray(response)) return response;
+      for (const key of keys) {
+        if (Array.isArray(response?.[key])) return response[key];
+      }
+      if (Array.isArray(response?.data)) return response.data;
+      return [];
+    },
+
+
     jumpCalendarToDate(dateStr) {
       if (!dateStr) return;
       this.$nextTick(() => {
@@ -938,6 +1070,55 @@ export default {
     normalizeUserID(raw) {
       const id = Number(raw);
       return Number.isFinite(id) && id > 0 ? id : null;
+    },
+
+    normalizeUnavailabilityBlock(rawBlock) {
+      const userID = this.normalizeUserID(rawBlock?.userID ?? rawBlock?.user?.userID ?? rawBlock?.user?.ID);
+      const startDate = rawBlock?.start_date;
+      const endDate = rawBlock?.end_date;
+      const startTime = this.toHMS(rawBlock?.start_time, "00:00:00");
+      const endTime = this.toHMS(rawBlock?.end_time, "23:59:59");
+
+      return {
+        id: rawBlock?.ID ?? rawBlock?.id,
+        userID,
+        start: new Date(`${startDate}T${startTime}`),
+        end: new Date(`${endDate}T${endTime}`),
+      };
+    },
+
+    async loadUnavailability() {
+      const workerIDs = new Set(
+        Object.keys(this.workersByID)
+          .map((key) => Number(key))
+          .filter((id) => Number.isFinite(id) && id > 0)
+      );
+
+      if (!workerIDs.size) {
+        this.unavailabilityBlocks = [];
+        return;
+      }
+
+      try {
+        const response = await unavailableServices.getAll({ limit: 1000 });
+        const rows = this.normalizeResponseArray(response, ["unavailabilities"]);
+        this.unavailabilityBlocks = rows
+          .map((row) => this.normalizeUnavailabilityBlock(row))
+          .filter((block) => block.id && workerIDs.has(Number(block.userID)));
+      } catch (error) {
+        console.error("Failed to load worker unavailability:", error);
+        this.unavailabilityBlocks = [];
+      }
+    },
+
+    doDateRangesOverlap(rangeStart, rangeEnd, blockStart, blockEnd) {
+      const start = rangeStart instanceof Date ? rangeStart.getTime() : new Date(rangeStart).getTime();
+      const end = rangeEnd instanceof Date ? rangeEnd.getTime() : new Date(rangeEnd).getTime();
+      const blockStartTime = blockStart instanceof Date ? blockStart.getTime() : new Date(blockStart).getTime();
+      const blockEndTime = blockEnd instanceof Date ? blockEnd.getTime() : new Date(blockEnd).getTime();
+
+      if ([start, end, blockStartTime, blockEndTime].some((value) => Number.isNaN(value))) return false;
+      return start < blockEndTime && blockStartTime < end;
     },
 
     getCurrentUser() {
@@ -1365,6 +1546,7 @@ export default {
           this.loadManagerSettings(),
           this.loadSchedules(),
         ]);
+        await this.loadUnavailability();
 
         const routeScheduleID = Number(this.$route?.query?.scheduleID);
         const routeTemplateID = Number(this.$route?.query?.templateID);
@@ -1651,7 +1833,7 @@ export default {
       };
     },
 
-    openCreateShiftModal(selection) {
+    async openCreateShiftModal(selection) {
       if (!this.selectedScheduleID) {
         this.showMessage("Create or select a schedule first.", "warning");
         return;
@@ -1671,6 +1853,8 @@ export default {
         assignedWorkerIDs: [],
         selectedTaskListIDs: [],
       };
+
+      await this.loadUnavailability();
       this.shiftDialog.open = true;
     },
 
@@ -1679,8 +1863,11 @@ export default {
       const shift = this.shifts.find((s) => Number(s.ID) === shiftID);
       if (!shift) return;
 
-      await this.loadAssignmentsForShift(shiftID);
-      await this.loadTasklistsForShift(shiftID);
+      await Promise.all([
+        this.loadAssignmentsForShift(shiftID),
+        this.loadTasklistsForShift(shiftID),
+        this.loadUnavailability(),
+      ]);
       const assignments = this.userShiftAssignmentsByShiftID[shiftID] || [];
       const tasklistLinks = this.shiftTaskListsByShiftID[shiftID] || [];
 
