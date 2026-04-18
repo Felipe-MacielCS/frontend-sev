@@ -5,6 +5,7 @@ import Login from "./views/Login.vue";
 import WorkerDashboard from "./views/WorkerDashBoard.vue";
 import WorkerClockInOut from "./views/WorkerClockInOut.vue";
 import WorkerSettings from "./views/WorkerSettings.vue";
+
 import ManagerDashboard from "./views/ManagerDashBoard.vue";
 import ManagerSettings from "./views/ManagerSettings.vue";
 import ManagerTemplates from "./views/ManagerTemplates.vue";
@@ -12,6 +13,8 @@ import AvailabilityWorker from "./views/AvailabilityWorker.vue";
 import ManagerAvailability from "./views/ManagerAvailability.vue";
 import ManagerUsers from "./views/ManagerUsers.vue";
 import ManagerTradeBoard from "./views/ManagerTradeBoard.vue";
+import ManagerTasklists from "./views/ManagerTasklists.vue";
+
 import WorkerTradeBoard from "./views/WorkerTradeBoard.vue";
 import WorkerAnnouncements from "./views/WorkerAnnouncements.vue";
 import Budget from "./views/Budget.vue";
@@ -47,6 +50,12 @@ const router = createRouter({
       path: "/manager",
       name: "managerDashboard",
       component: ManagerDashboard,
+      meta: { role: "Manager" },
+    },
+    {
+      path: "/manager/tasklists",
+      name: "managerTasklists",
+      component: ManagerTasklists,
       meta: { role: "Manager" },
     },
     {

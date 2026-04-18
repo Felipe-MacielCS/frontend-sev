@@ -490,6 +490,20 @@
             class="mt-1"
             :menu-props="selectMenuProps"
           />
+
+          <v-select
+            v-model="shiftDialog.form.selectedTaskListIDs"
+            :items="tasklistItems"
+            item-title="label"
+            item-value="value"
+            label="Tasklists"
+            variant="outlined"
+            density="comfortable"
+            multiple
+            chips
+            closable-chips
+            class="mt-1"
+          />
         </v-card-text>
 
         <v-card-actions>
@@ -531,6 +545,8 @@
 import Calendar from "../components/Calendar.vue";
 import scheduleServices from "../services/scheduleServices.js";
 import shiftServices from "../services/shiftServices.js";
+import shiftTaskListServices from "../services/shiftTaskListServices.js";
+import taskListServices from "../services/taskListServices.js";
 import userShiftServices from "../services/userShiftServices.js";
 import departmentUsersServices from "../services/departmentUsersServices.js";
 import userServices from "../services/userServices.js";
@@ -564,7 +580,6 @@ export default {
         type: "draft",
         name: "",
       },
-
       scheduleCadenceOptions: [
         { label: "Weekly (1 week)", value: "weekly" },
         { label: "Biweekly (2 weeks)", value: "biweekly" },
@@ -592,8 +607,10 @@ export default {
 
       shifts: [],
       userShiftAssignmentsByShiftID: {},
+      shiftTaskListsByShiftID: {},
       workersByID: {},
       positionsByID: {},
+      tasklists: [],
       managerSettings: {
         schedule_week_starts_monday: false,
         default_shift_workers_required: 1,
@@ -612,6 +629,7 @@ export default {
           workers_required: 1,
           positionID: null,
           assignedWorkerIDs: [],
+          selectedTaskListIDs: [],
         },
       },
       deleteConfirm: {
@@ -731,7 +749,6 @@ export default {
     firstScheduleID() {
       return this.scheduleItems[0]?.value || null;
     },
-
     currentCalendarSchedule() {
       return this.schedules.find((s) => Number(s.ID) === Number(this.selectedScheduleID)) || null;
     },
@@ -764,11 +781,18 @@ export default {
         })
         .filter(Boolean);
     },
+    tasklistItems() {
+      return this.tasklists.map((tasklist) => ({
+        value: tasklist.ID,
+        label: tasklist.name || `Tasklist ${tasklist.ID}`,
+      }));
+    },
 
     calendarEvents() {
       return this.shifts.map((shift) => {
         const shiftID = shift.ID;
         const assignments = this.userShiftAssignmentsByShiftID[shiftID] || [];
+        const tasklistCount = (this.shiftTaskListsByShiftID[shiftID] || []).length;
         const workerNames = assignments
           .map((a) => {
             const userID = Number(a.userID);
@@ -784,12 +808,15 @@ export default {
           assignedCount > 0
             ? `${positionTitle} (${assignedCount}/${required}) - ${workerNames}`
             : `${positionTitle} (0/${required}) - Unassigned`;
+        const titleWithTasklists = tasklistCount
+          ? `${title} | ${tasklistCount} tasklist${tasklistCount === 1 ? "" : "s"}`
+          : title;
 
         const color = assignedCount >= required ? "#2e7d32" : "#c62828";
 
         return {
           id: String(shift.ID),
-          title,
+          title: titleWithTasklists,
           start: `${shift.shift_date}T${this.toHHMM(shift.start_time)}:00`,
           end: `${shift.shift_date}T${this.toHHMM(shift.end_time)}:00`,
           color,
@@ -1267,7 +1294,7 @@ export default {
         for (const s of templateShifts) {
           const original = new Date(`${s.shift_date}T00:00:00`);
           const shifted = this.addDays(original, dayOffset);
-          await shiftServices.create({
+          const createdShift = await shiftServices.create({
             shift_date: this.toISODate(shifted),
             start_time: this.toHHMM(s.start_time),
             end_time: this.toHHMM(s.end_time),
@@ -1275,6 +1302,14 @@ export default {
             scheduleID: newScheduleID,
             positionID: s.positionID || null,
           });
+          const createdShiftID = createdShift?.ID ?? createdShift?.id ?? createdShift?.data?.ID;
+          if (createdShiftID) {
+            const sourceTasklists = await shiftTaskListServices.getAll({ shiftID: s.ID });
+            const selectedTaskListIDs = Array.isArray(sourceTasklists)
+              ? sourceTasklists.map((row) => row.task_listID)
+              : [];
+            await this.syncShiftTasklists(createdShiftID, selectedTaskListIDs);
+          }
         }
 
         await this.loadSchedules();
@@ -1323,7 +1358,13 @@ export default {
         }
 
         const restoredState = this.restoreSessionState();
-        await Promise.all([this.loadWorkers(), this.loadPositions(), this.loadManagerSettings(), this.loadSchedules()]);
+        await Promise.all([
+          this.loadWorkers(),
+          this.loadPositions(),
+          this.loadTasklists(),
+          this.loadManagerSettings(),
+          this.loadSchedules(),
+        ]);
 
         const routeScheduleID = Number(this.$route?.query?.scheduleID);
         const routeTemplateID = Number(this.$route?.query?.templateID);
@@ -1383,6 +1424,37 @@ export default {
       }
     },
 
+    async syncShiftTasklists(shiftID, selectedTaskListIDs = []) {
+      const currentRows = await shiftTaskListServices.getAll({ shiftID });
+      const existingRows = Array.isArray(currentRows) ? currentRows : [];
+      const existingIDs = new Set(existingRows.map((row) => String(row.task_listID)));
+      const nextIDs = new Set(
+        selectedTaskListIDs
+          .map((id) => Number(id))
+          .filter((id) => Number.isFinite(id) && id > 0)
+          .map((id) => String(id))
+      );
+
+      const tasklistIDsToAdd = [...nextIDs].filter((id) => !existingIDs.has(id));
+      const tasklistRowsToRemove = existingRows.filter(
+        (row) => !nextIDs.has(String(row.task_listID))
+      );
+
+      await Promise.all([
+        ...tasklistIDsToAdd.map((taskListID) =>
+          shiftTaskListServices.create({
+            shiftID,
+            task_listID: Number(taskListID),
+          })
+        ),
+        ...tasklistRowsToRemove.map((row) =>
+          row.ID
+            ? shiftTaskListServices.delete(row.ID)
+            : shiftTaskListServices.deleteByPair(shiftID, row.task_listID)
+        ),
+      ]);
+    },
+
     async loadWorkers() {
       const linksRes = await departmentUsersServices.getByDepartment(this.managerDepartmentID);
       const links = Array.isArray(linksRes)
@@ -1421,6 +1493,11 @@ export default {
         if (id) acc[id] = p;
         return acc;
       }, {});
+    },
+
+    async loadTasklists() {
+      const res = await taskListServices.getAll({ departmentID: this.managerDepartmentID });
+      this.tasklists = Array.isArray(res) ? res : [];
     },
 
     async loadSchedules() {
@@ -1534,13 +1611,17 @@ export default {
       if (!this.selectedScheduleID) {
         this.shifts = [];
         this.userShiftAssignmentsByShiftID = {};
+        this.shiftTaskListsByShiftID = {};
         return;
       }
 
       const shifts = await shiftServices.getAll({ scheduleID: this.selectedScheduleID });
       this.shifts = Array.isArray(shifts) ? shifts : [];
 
-      await Promise.all(this.shifts.map((shift) => this.loadAssignmentsForShift(shift.ID)));
+      await Promise.all([
+        ...this.shifts.map((shift) => this.loadAssignmentsForShift(shift.ID)),
+        ...this.shifts.map((shift) => this.loadTasklistsForShift(shift.ID)),
+      ]);
       this.$nextTick(() => this.$refs.managerCalendar?.updateSize());
     },
 
@@ -1550,13 +1631,22 @@ export default {
         rows = await userShiftServices.getAll({ shiftID });
       } catch (e) {
         console.error("Failed to load shift assignments:", e);
-        this.showMessage(
-          e?.response?.data?.message || "Could not load shift assignments.",
-          "warning"
-        );
       }
       this.userShiftAssignmentsByShiftID = {
         ...this.userShiftAssignmentsByShiftID,
+        [shiftID]: Array.isArray(rows) ? rows : [],
+      };
+    },
+
+    async loadTasklistsForShift(shiftID) {
+      let rows = [];
+      try {
+        rows = await shiftTaskListServices.getAll({ shiftID });
+      } catch (e) {
+        console.error("Failed to load shift tasklists:", e);
+      }
+      this.shiftTaskListsByShiftID = {
+        ...this.shiftTaskListsByShiftID,
         [shiftID]: Array.isArray(rows) ? rows : [],
       };
     },
@@ -1579,6 +1669,7 @@ export default {
         workers_required: Number(this.managerSettings.default_shift_workers_required) || 1,
         positionID: this.positionItems[0]?.value ?? null,
         assignedWorkerIDs: [],
+        selectedTaskListIDs: [],
       };
       this.shiftDialog.open = true;
     },
@@ -1589,7 +1680,9 @@ export default {
       if (!shift) return;
 
       await this.loadAssignmentsForShift(shiftID);
+      await this.loadTasklistsForShift(shiftID);
       const assignments = this.userShiftAssignmentsByShiftID[shiftID] || [];
+      const tasklistLinks = this.shiftTaskListsByShiftID[shiftID] || [];
 
       this.shiftDialog.mode = "edit";
       this.shiftDialog.shiftID = shiftID;
@@ -1600,6 +1693,7 @@ export default {
         workers_required: shift.workers_required || 1,
         positionID: shift.positionID,
         assignedWorkerIDs: assignments.map((a) => a.userID),
+        selectedTaskListIDs: tasklistLinks.map((link) => link.task_listID),
       };
       this.shiftDialog.open = true;
     },
@@ -1662,6 +1756,8 @@ export default {
           emitNotificationRefresh();
           return;
         }
+
+        await this.syncShiftTasklists(shiftID, form.selectedTaskListIDs);
 
         const existing = await userShiftServices.getAll({ shiftID });
         const existingRows = Array.isArray(existing) ? existing : [];
