@@ -7,13 +7,6 @@
             <div class="text-overline workspace-kicker">Templates</div>
             <div class="text-h5 font-weight-bold">{{ selectedTemplateName }}</div>
           </div>
-
-          <div class="d-flex align-center flex-wrap justify-end ga-2">
-            <v-chip color="blue" variant="tonal" size="small">Template</v-chip>
-            <v-chip size="small" variant="tonal" color="teal">
-              {{ filteredShifts.length }} shifts
-            </v-chip>
-          </div>
         </div>
 
         <v-row dense class="align-end schedule-toolbar">
@@ -66,15 +59,6 @@
                 v-if="selectedTemplate"
                 color="primary"
                 variant="tonal"
-                prepend-icon="mdi-calendar-plus"
-                @click="openApplyTemplateDialog"
-              >
-                Use Template
-              </v-btn>
-              <v-btn
-                v-if="selectedTemplate"
-                color="primary"
-                variant="tonal"
                 :loading="isSavingTemplate"
                 @click="updateSelectedTemplate"
               >
@@ -93,26 +77,32 @@
           </v-col>
         </v-row>
 
-        <div class="d-flex align-center justify-space-between flex-wrap ga-2 mt-3">
-
+        <div class="d-flex align-center justify-start flex-wrap ga-2 mt-3">
+          <v-btn
+            variant="text"
+            color="primary"
+            prepend-icon="mdi-calendar-plus"
+            :disabled="!selectedTemplate"
+            @click="openCreateShiftFromButton"
+          >
+            New Shift
+          </v-btn>
+          <v-btn
+            variant="text"
+            color="primary"
+            prepend-icon="mdi-calendar-plus"
+            :disabled="!selectedTemplate"
+            @click="openApplyTemplateDialog"
+          >
+            Use Template
+          </v-btn>
           <v-btn variant="text" color="primary" prepend-icon="mdi-calendar-month-outline" to="/manager">
             Back To Schedule
           </v-btn>
         </div>
       </div>
 
-      <v-alert v-if="error" type="error" variant="tonal" class="mb-3">
-        {{ error }}
-      </v-alert>
 
-      <v-alert
-        v-if="!error && templates.length === 0 && !loading"
-        type="info"
-        variant="tonal"
-        class="mb-3"
-      >
-        No templates yet
-      </v-alert>
 
       <div class="calendar-frame">
         <Calendar
@@ -123,6 +113,7 @@
           :isSelectable="true"
           :height="760"
           :contentHeight="700"
+          :slotEventOverlap="false"
           @time-selected="openCreateShiftModal"
           @shift-clicked="openEditShiftModal"
         />
@@ -161,10 +152,7 @@
           {{ shiftDialog.mode === "create" ? "Create Template Shift" : "Edit Template Shift" }}
         </v-card-title>
         <v-card-text>
-          <v-alert v-if="!selectedTemplateID" type="warning" variant="tonal" density="compact" class="mb-3">
-            Select or create a template before adding a shift
-  
-          </v-alert>
+
 
           <v-row dense>
             <v-col cols="12" sm="4">
@@ -201,6 +189,20 @@
               />
             </v-col>
           </v-row>
+
+          <v-select
+            v-model="shiftDialog.form.assignedWorkerIDs"
+            :items="workerItems"
+            item-title="label"
+            item-value="value"
+            label="Assign Workers"
+            variant="outlined"
+            multiple
+            chips
+            closable-chips
+            class="mt-1"
+            :menu-props="selectMenuProps"
+          />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -229,11 +231,6 @@
             v-model="templateApply.anchor_date"
             label="Week Of"
             type="date"
-            variant="outlined"
-          />
-          <v-text-field
-            v-model="templateApply.name"
-            label="New Schedule Name (Optional)"
             variant="outlined"
           />
         </v-card-text>
@@ -278,7 +275,9 @@
 import Calendar from "../components/Calendar.vue";
 import scheduleServices from "../services/scheduleServices.js";
 import shiftServices from "../services/shiftServices.js";
+import userShiftServices from "../services/userShiftServices.js";
 import departmentUsersServices from "../services/departmentUsersServices.js";
+import userServices from "../services/userServices.js";
 import positionServices from "../services/positionServices.js";
 import { getPositionColor } from "../utils/positionColors.js";
 
@@ -294,6 +293,8 @@ export default {
       selectedTemplateID: null,
       selectedPositionFilter: "all",
       shifts: [],
+      userShiftAssignmentsByShiftID: {},
+      workersByID: {},
       positionsByID: {},
       createTemplateDialog: false,
       isCreatingTemplate: false,
@@ -309,7 +310,6 @@ export default {
       },
       templateApply: {
         anchor_date: "",
-        name: "",
       },
       selectMenuProps: {
         attach: "body",
@@ -328,6 +328,7 @@ export default {
           end_time: "",
           workers_required: 1,
           positionID: null,
+          assignedWorkerIDs: [],
         },
       },
       deleteConfirm: { open: false },
@@ -357,6 +358,15 @@ export default {
         ...this.positionItems,
       ];
     },
+    workerItems() {
+      return Object.values(this.workersByID)
+        .map((worker) => {
+          const id = Number(worker.ID ?? worker.userID ?? worker.id);
+          if (!Number.isFinite(id) || id <= 0) return null;
+          return { value: id, label: worker.name || `Worker ${id}` };
+        })
+        .filter(Boolean);
+    },
     filteredShifts() {
       if (this.selectedPositionFilter === "all") return this.shifts;
       return this.shifts.filter(
@@ -377,8 +387,19 @@ export default {
 
     calendarEvents() {
       return this.filteredShifts.map((shift) => {
+        const assignments = this.userShiftAssignmentsByShiftID[shift.ID] || [];
+        const workerNames = assignments
+          .map((assignment) => {
+            const userID = Number(assignment.userID);
+            return this.workersByID[userID]?.name || `Worker ${assignment.userID}`;
+          })
+          .join(", ");
         const position = this.positionsByID[shift.positionID];
-        const title = `${position?.title || "Shift"} (${shift.workers_required || 1} needed)`;
+        const required = shift.workers_required || 1;
+        const title =
+          assignments.length > 0
+            ? `${position?.title || "Shift"} (${assignments.length}/${required}) - ${workerNames}`
+            : `${position?.title || "Shift"} (0/${required}) - Unassigned`;
         return {
           id: String(shift.ID),
           title,
@@ -418,6 +439,7 @@ export default {
       if (!value) return "00:00";
       return String(value).slice(0, 5);
     },
+
     showMessage(message, color = "success") {
       this.snackbar = { show: true, message, color };
     },
@@ -425,6 +447,10 @@ export default {
       const raw = localStorage.getItem("user");
       const stored = raw ? JSON.parse(raw) : null;
       return stored?.user ?? stored ?? null;
+    },
+    normalizeUserID(raw) {
+      const id = Number(raw);
+      return Number.isFinite(id) && id > 0 ? id : null;
     },
 
     async getManagerDepartmentID() {
@@ -454,7 +480,7 @@ export default {
           return;
         }
 
-        await Promise.all([this.loadPositions(), this.loadTemplates()]);
+        await Promise.all([this.loadWorkers(), this.loadPositions(), this.loadTemplates()]);
         const routeTemplateID = Number(this.$route?.query?.templateID);
         if (Number.isFinite(routeTemplateID) && this.templates.some((t) => Number(t.ID) === routeTemplateID)) {
           this.selectedTemplateID = routeTemplateID;
@@ -472,6 +498,28 @@ export default {
     async loadTemplates() {
       const res = await scheduleServices.getAll({ departmentID: this.managerDepartmentID, type: "template", limit: 200 });
       this.templates = Array.isArray(res?.schedules) ? res.schedules : [];
+    },
+    async loadWorkers() {
+      const linksRes = await departmentUsersServices.getByDepartment(this.managerDepartmentID);
+      const links = Array.isArray(linksRes)
+        ? linksRes
+        : Array.isArray(linksRes?.departmentusers)
+          ? linksRes.departmentusers
+          : Array.isArray(linksRes?.data)
+            ? linksRes.data
+            : [];
+
+      const workerIDs = links
+        .filter((link) => String(link.role || "").trim().toLowerCase() === "worker")
+        .map((link) => link.userID ?? link.userId ?? link.UserID)
+        .filter(Boolean);
+
+      const users = await Promise.all(workerIDs.map((id) => userServices.get(id)));
+      this.workersByID = users.reduce((acc, user) => {
+        const normalizedID = this.normalizeUserID(user?.ID ?? user?.userID ?? user?.id);
+        if (normalizedID) acc[normalizedID] = { ...user, ID: normalizedID };
+        return acc;
+      }, {});
     },
     async loadPositions() {
       const res = await positionServices.getAll({ departmentID: this.managerDepartmentID, limit: 200 });
@@ -507,11 +555,30 @@ export default {
     async loadShiftsForSelectedTemplate() {
       if (!this.selectedTemplateID) {
         this.shifts = [];
+        this.userShiftAssignmentsByShiftID = {};
         return;
       }
       const shifts = await shiftServices.getAll({ scheduleID: this.selectedTemplateID });
       this.shifts = Array.isArray(shifts) ? shifts : [];
+      await Promise.all(this.shifts.map((shift) => this.loadAssignmentsForShift(shift.ID)));
       this.$nextTick(() => this.$refs.templateCalendar?.updateSize?.());
+    },
+    async loadAssignmentsForShift(shiftID) {
+      let rows = [];
+      try {
+        rows = await userShiftServices.getAll({ shiftID });
+      } catch (e) {
+        console.error("Failed to load template shift assignments:", e);
+        this.showMessage(
+          e?.response?.data?.message || "Could not load template shift assignments.",
+          "warning"
+        );
+      }
+
+      this.userShiftAssignmentsByShiftID = {
+        ...this.userShiftAssignmentsByShiftID,
+        [shiftID]: Array.isArray(rows) ? rows : [],
+      };
     },
     async createTemplate() {
       if (!this.canCreateTemplate) return;
@@ -547,8 +614,9 @@ export default {
           type: "template",
         });
         const updated = res?.data;
-        this.templates = this.templates.map((t) => Number(t.ID) === Number(this.selectedTemplateID) ? { ...t, ...(updated || {}), name: this.templateEditor.name } : t);
-        this.showMessage("Template saved.");
+        
+        this.templates = this.templates.map((t) => Number(t.ID) === Number(this.selectedTemplateID) ? { ...t, ...(updated || {}), 
+        name: this.templateEditor.name } : t);
       } catch (e) {
         console.error(e);
         this.showMessage(e?.response?.data?.message || "Failed to save template.", "error");
@@ -589,9 +657,7 @@ export default {
         const dayOffset = Math.round((targetStart - sourceStart) / (1000 * 60 * 60 * 24));
 
         const createdScheduleRes = await scheduleServices.create({
-          name:
-            String(this.templateApply.name || "").trim() ||
-            `${template.name || "Schedule"} ${this.toISODate(targetStart)}`,
+          name: null,
           start_date: this.toISODate(targetStart),
           end_date: this.toISODate(targetEnd),
           type: "draft",
@@ -604,7 +670,7 @@ export default {
         for (const shift of templateShifts) {
           const original = new Date(`${shift.shift_date}T00:00:00`);
           const shifted = this.addDays(original, dayOffset);
-          await shiftServices.create({
+          const createdShiftResponse = await shiftServices.create({
             shift_date: this.toISODate(shifted),
             start_time: this.toHHMM(shift.start_time),
             end_time: this.toHHMM(shift.end_time),
@@ -612,10 +678,23 @@ export default {
             scheduleID: newScheduleID,
             positionID: shift.positionID || null,
           });
+          const createdShift = createdShiftResponse?.data || createdShiftResponse;
+          const createdShiftID = createdShift?.ID ?? createdShift?.id ?? null;
+          const assignments = this.userShiftAssignmentsByShiftID[shift.ID] || [];
+
+          if (createdShiftID) {
+            for (const assignment of assignments) {
+              await userShiftServices.create({
+                shiftID: createdShiftID,
+                userID: assignment.userID,
+                status: assignment.status || "assigned",
+              });
+            }
+          }
         }
 
         this.applyTemplateDialog = false;
-        this.showMessage("Schedule created from template.");
+
         this.$router.push({ path: "/manager", query: { scheduleID: String(newScheduleID) } });
       } catch (e) {
         console.error(e);
@@ -634,7 +713,7 @@ export default {
         this.selectedTemplateID = this.templates[0]?.ID || null;
         this.deleteConfirm.open = false;
         await this.onTemplateSelected();
-        this.showMessage("Template deleted.");
+
       } catch (e) {
         console.error(e);
         this.showMessage(e?.response?.data?.message || "Failed to delete template.", "error");
@@ -642,13 +721,7 @@ export default {
         this.isDeletingTemplate = false;
       }
     },
-    openCreateShiftModal(selection) {
-      if (!this.selectedTemplateID) {
-        this.showMessage("Create or select a template first.", "warning");
-        return;
-      }
-      const start = new Date(selection.start);
-      const end = new Date(selection.end);
+    openCreateShiftForm(start, end) {
       this.shiftDialog = {
         open: true,
         mode: "create",
@@ -659,13 +732,39 @@ export default {
           end_time: end.toTimeString().slice(0, 5),
           workers_required: 1,
           positionID: null,
+          assignedWorkerIDs: [],
         },
       };
     },
-    openEditShiftModal(event) {
+    openCreateShiftFromButton() {
+      if (!this.selectedTemplateID) {
+        return;
+      }
+
+      const selectedDate =
+        this.$refs.templateCalendar?.getCurrentDate?.() ||
+        this.selectedTemplate?.start_date ||
+        this.toISODate(new Date());
+      const start = new Date(`${selectedDate}T09:00:00`);
+      const end = new Date(`${selectedDate}T10:00:00`);
+
+      this.openCreateShiftForm(start, end);
+    },
+    openCreateShiftModal(selection) {
+      if (!this.selectedTemplateID) {
+
+        return;
+      }
+
+      this.openCreateShiftForm(new Date(selection.start), new Date(selection.end));
+    },
+    async openEditShiftModal(event) {
       const shiftID = Number(event?.id ?? event?._def?.publicId ?? event?.extendedProps?.shiftID);
       const shift = this.shifts.find((s) => Number(s.ID) === shiftID);
       if (!shift) return;
+      await this.loadAssignmentsForShift(shiftID);
+      const assignments = this.userShiftAssignmentsByShiftID[shiftID] || [];
+
       this.shiftDialog = {
         open: true,
         mode: "edit",
@@ -676,6 +775,7 @@ export default {
           end_time: this.toHHMM(shift.end_time),
           workers_required: shift.workers_required || 1,
           positionID: shift.positionID || null,
+          assignedWorkerIDs: assignments.map((assignment) => assignment.userID),
         },
       };
     },
@@ -687,6 +787,7 @@ export default {
       try {
         this.isSavingShift = true;
         const f = this.shiftDialog.form;
+        let shiftID = this.shiftDialog.shiftID;
         const payload = {
           shift_date: f.shift_date,
           start_time: this.toHHMM(f.start_time),
@@ -696,13 +797,81 @@ export default {
           positionID: f.positionID || null,
         };
         if (this.shiftDialog.mode === "create") {
-          await shiftServices.create(payload);
+          const createdShift = await shiftServices.create(payload);
+          shiftID =
+            createdShift?.ID ??
+            createdShift?.id ??
+            createdShift?.data?.ID ??
+            createdShift?.data?.id ??
+            null;
         } else {
-          await shiftServices.update(this.shiftDialog.shiftID, payload);
+          await shiftServices.update(shiftID, payload);
         }
+
+        if (!shiftID) {
+          this.showMessage("Template shift saved but shift ID was not returned.", "warning");
+          await this.loadShiftsForSelectedTemplate();
+          this.closeShiftDialog();
+          return;
+        }
+
+        const existing = await userShiftServices.getAll({ shiftID });
+        const existingRows = Array.isArray(existing) ? existing : [];
+        const existingByUserID = existingRows.reduce((acc, row) => {
+          acc[row.userID] = row;
+          return acc;
+        }, {});
+
+        const nextUserIDs = new Set(
+          f.assignedWorkerIDs
+            .map((id) => this.normalizeUserID(id))
+            .filter((id) => id !== null)
+        );
+        const existingUserIDs = new Set(
+          existingRows
+            .map((row) => this.normalizeUserID(row.userID))
+            .filter((id) => id !== null)
+        );
+
+        const assignmentErrors = [];
+
+        for (const existingUserID of existingUserIDs) {
+          if (!nextUserIDs.has(existingUserID)) {
+            const row = existingByUserID[existingUserID];
+            if (row?.ID) {
+              try {
+                await userShiftServices.delete(row.ID);
+              } catch (err) {
+                assignmentErrors.push(
+                  err?.response?.data?.message || `Failed removing worker ${existingUserID}.`
+                );
+              }
+            }
+          }
+        }
+
+        for (const userID of nextUserIDs) {
+          if (!existingUserIDs.has(userID)) {
+            try {
+              await userShiftServices.create({
+                shiftID,
+                userID,
+                status: "assigned",
+              });
+            } catch (err) {
+              assignmentErrors.push(
+                err?.response?.data?.message || `Failed assigning worker ${userID}.`
+              );
+            }
+          }
+        }
+
         await this.loadShiftsForSelectedTemplate();
         this.closeShiftDialog();
-        this.showMessage("Template shift saved.");
+        if (assignmentErrors.length > 0) {
+          this.showMessage(`Template shift saved, but assignments failed: ${assignmentErrors[0]}`, "warning");
+        }
+
       } catch (e) {
         console.error(e);
         this.showMessage(e?.response?.data?.message || "Failed to save template shift.", "error");
@@ -717,7 +886,7 @@ export default {
         await shiftServices.delete(this.shiftDialog.shiftID);
         await this.loadShiftsForSelectedTemplate();
         this.closeShiftDialog();
-        this.showMessage("Template shift deleted.");
+
       } catch (e) {
         console.error(e);
         this.showMessage("Failed to delete template shift.", "error");

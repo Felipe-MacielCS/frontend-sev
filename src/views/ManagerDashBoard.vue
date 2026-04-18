@@ -9,17 +9,6 @@
           </div>
 
           <div class="d-flex align-center flex-wrap justify-end ga-2">
-            <v-chip
-              v-if="currentCalendarScheduleTypeLabel"
-              color="blue"
-              variant="tonal"
-              size="small"
-            >
-              {{ currentCalendarScheduleTypeLabel }}
-            </v-chip>
-            <v-chip size="small" variant="tonal" color="teal">
-              {{ filteredShifts.length }} shifts
-            </v-chip>
             <v-chip size="small" variant="outlined" color="error">
               {{ unassignedShiftCount }} unassigned
             </v-chip>
@@ -95,7 +84,7 @@
             color="primary"
             prepend-icon="mdi-calendar-plus"
             :disabled="!selectedSchedule"
-            @click="openCreateShiftFromButton"
+            @click="openCreateShift"
           >
             New Shift
           </v-btn>
@@ -116,6 +105,15 @@
           >
             Generate Template
           </v-btn>
+          <v-btn
+            variant="text"
+            color="primary"
+            prepend-icon="mdi-repeat"
+            :disabled="!selectedSchedule || !shifts.length"
+            @click="openRepeatShiftsDialog"
+          >
+            Repeat Shifts
+          </v-btn>
         </div>
       </div>
 
@@ -131,7 +129,7 @@
           :firstDay="managerSettings.schedule_week_starts_monday ? 1 : 0"
           :slotEventOverlap="false"
           @dates-changed="saveSessionState"
-          @time-selected="openCreateShiftModal"
+          @time-selected="openCreateShift"
           @shift-clicked="openEditShiftModal"
         />
       </div>
@@ -142,19 +140,7 @@
         <v-card-title class="text-h6">Create Schedule</v-card-title>
         <v-card-text>
           <v-row dense>
-            <v-col cols="12" sm="6">
-              <v-select
-                v-model="newSchedule.cadence"
-                label="Length"
-                :items="scheduleCadenceOptions"
-                item-title="label"
-                item-value="value"
-                variant="outlined"
-                density="comfortable"
-                :menu-props="selectMenuProps"
-              />
-            </v-col>
-            <v-col cols="12" sm="6">
+            <v-col cols="12">
               <v-text-field
                 v-model="newSchedule.anchor_date"
                 label="Week Of"
@@ -168,7 +154,7 @@
           <v-sheet rounded="lg" class="pa-3 generated-range-sheet" border>
             <div class="text-caption generated-range-label">Date Range</div>
             <div class="text-body-1 font-weight-medium generated-range-value">
-              {{ computedScheduleRangeLabel || "Choose a week to generate the range." }}
+              {{ computedScheduleRangeLabel || "Choose a week to generate the schedule." }}
             </div>
           </v-sheet>
         </v-card-text>
@@ -182,6 +168,41 @@
             @click="createSchedule"
           >
             Create Schedule
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="repeatShiftsDialog.open" max-width="520" eager>
+      <v-card>
+        <v-card-title class="text-h6">Repeat Shifts</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model.number="repeatShiftsDialog.weeks"
+            label="Number of Future Weeks"
+            type="number"
+            min="1"
+            variant="outlined"
+            density="comfortable"
+          />
+
+          <div class="text-body-2 text-medium-emphasis">
+            Copies the first week of shifts into future weeks as separate shifts, so each copied week can still be edited on its own.
+          </div>
+          <div v-if="repeatScheduleEndLabel" class="text-body-2 text-medium-emphasis mt-2">
+            The current schedule will extend through {{ repeatScheduleEndLabel }}.
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="closeRepeatShiftsDialog">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            :loading="repeatShiftsDialog.saving"
+            :disabled="!canRepeatShifts"
+            @click="repeatShifts"
+          >
+            Repeat Shifts
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -244,15 +265,7 @@
         </v-card-title>
 
         <v-card-text>
-          <v-alert
-            v-if="!selectedScheduleID"
-            type="warning"
-            variant="tonal"
-            density="compact"
-            class="mb-3"
-          >
-            Select or create a schedule to add shifts
-          </v-alert>
+
 
           <v-row dense>
             <v-col cols="12" sm="4">
@@ -308,6 +321,7 @@
               />
             </v-col>
           </v-row>
+
 
           <v-select
             v-model="shiftDialog.form.assignedWorkerIDs"
@@ -393,14 +407,8 @@ export default {
 
       newSchedule: {
         anchor_date: "",
-        cadence: "weekly",
         type: "draft",
       },
-
-      scheduleCadenceOptions: [
-        { label: "Weekly (1 week)", value: "weekly" },
-        { label: "Biweekly (2 weeks)", value: "biweekly" },
-      ],
 
       scheduleTypeOptions: [
         { label: "Draft", value: "draft" },
@@ -420,7 +428,6 @@ export default {
         templateScheduleID: null,
         anchor_date: "",
         type: "draft",
-        name: "",
       },
 
       shifts: [],
@@ -459,6 +466,11 @@ export default {
         saving: false,
         name: "",
       },
+      repeatShiftsDialog: {
+        open: false,
+        saving: false,
+        weeks: 1,
+      },
 
       snackbar: {
         show: false,
@@ -479,8 +491,7 @@ export default {
     computedScheduleRange() {
       if (!this.newSchedule.anchor_date) return null;
       const weekStart = this.getStartOfWeek(new Date(`${this.newSchedule.anchor_date}T00:00:00`));
-      const daySpan = this.newSchedule.cadence === "biweekly" ? 13 : 6;
-      const weekEnd = this.addDays(weekStart, daySpan);
+      const weekEnd = this.addDays(weekStart, 6);
 
       return {
         start_date: this.toISODate(weekStart),
@@ -506,11 +517,26 @@ export default {
     canCreateSchedule() {
       const hasCoreFields =
         !!this.managerDepartmentID &&
-        !!this.newSchedule.anchor_date &&
-        !!this.newSchedule.cadence;
+        !!this.newSchedule.anchor_date;
       if (!hasCoreFields) return false;
 
       return !!this.computedScheduleRange;
+    },
+
+    canRepeatShifts() {
+      return (
+        !!this.selectedSchedule &&
+        this.shifts.length > 0 &&
+        Number(this.repeatShiftsDialog.weeks) >= 1
+      );
+    },
+
+    repeatScheduleEndLabel() {
+      if (!this.selectedSchedule || Number(this.repeatShiftsDialog.weeks) < 1) return "";
+      const scheduleStart = new Date(`${this.selectedSchedule.start_date}T00:00:00`);
+      const futureWeeks = Math.max(1, Number(this.repeatShiftsDialog.weeks) || 1);
+      const repeatedEnd = this.addDays(scheduleStart, ((futureWeeks + 1) * 7) - 1);
+      return this.formatDisplayDate(this.toISODate(repeatedEnd));
     },
 
     templateScheduleItems() {
@@ -582,12 +608,6 @@ export default {
       const schedule = this.currentCalendarSchedule;
       if (!schedule) return "No schedule selected";
       return this.formatScheduleRange(schedule);
-    },
-
-    currentCalendarScheduleTypeLabel() {
-      const schedule = this.currentCalendarSchedule;
-      if (!schedule?.type) return "";
-      return this.formatScheduleType(schedule.type);
     },
 
     positionItems() {
@@ -814,6 +834,24 @@ export default {
       this.createScheduleDialog = true;
     },
 
+    openRepeatShiftsDialog() {
+
+
+      this.repeatShiftsDialog = {
+        open: true,
+        saving: false,
+        weeks: 1,
+      };
+    },
+
+    closeRepeatShiftsDialog() {
+      this.repeatShiftsDialog = {
+        open: false,
+        saving: false,
+        weeks: 1,
+      };
+    },
+
     openDeleteConfirm(target) {
       this.deleteConfirm = {
         open: true,
@@ -887,7 +925,7 @@ export default {
 
         await this.loadSchedules();
         this.closeGenerateTemplateDialog();
-        this.showMessage("Template generated");
+
       } catch (e) {
         console.error(e);
         this.showMessage(e?.response?.data?.message || e?.message || "Failed to generate template.", "error");
@@ -992,6 +1030,7 @@ export default {
     saveSessionState() {
       try {
         sessionStorage.setItem(
+
           SESSION_STORAGE_KEY,
           JSON.stringify({
             activePanel: this.activePanel,
@@ -1026,6 +1065,7 @@ export default {
     restoreSessionState() {
       const state = this.readSessionState();
       if (!state) return null;
+
 
       this.activePanel = "schedules";
       this.selectedScheduleID = state.selectedScheduleID || null;
@@ -1067,11 +1107,11 @@ export default {
         const updated = res?.data || null;
         const keepSelectedID = this.selectedScheduleID;
         await this.loadSchedules();
+
         this.selectedScheduleID = keepSelectedID;
         await this.loadShiftsForSelectedSchedule();
         this.jumpCalendarToDate(updated?.start_date || this.selectedSchedule?.start_date);
         this.refreshScheduleEditorFromSelected();
-        this.showMessage("Schedule updated.");
       } catch (e) {
         console.error(e);
         this.showMessage(e?.response?.data?.message || "Failed to update schedule.", "error");
@@ -1092,7 +1132,6 @@ export default {
         await this.loadShiftsForSelectedSchedule();
         this.jumpCalendarToDate(updated?.start_date || this.selectedSchedule?.start_date);
         this.refreshScheduleEditorFromSelected();
-        this.showMessage("Schedule set as active.");
       } catch (e) {
         console.error(e);
         this.showMessage(
@@ -1131,7 +1170,6 @@ export default {
           this.userShiftAssignmentsByShiftID = {};
         }
         this.refreshScheduleEditorFromSelected();
-        this.showMessage("Schedule deleted.");
       } catch (e) {
         console.error(e);
         this.showMessage(e?.response?.data?.message || "Failed to delete schedule.", "error");
@@ -1171,7 +1209,6 @@ export default {
           }
         }
 
-        this.showMessage("Template deleted.");
       } catch (e) {
         console.error(e);
         this.showMessage(e?.response?.data?.message || "Failed to delete template.", "error");
@@ -1197,9 +1234,7 @@ export default {
         const dayOffset = Math.round((targetStart - sourceStart) / (1000 * 60 * 60 * 24));
 
         const createdScheduleRes = await scheduleServices.create({
-          name:
-            String(this.templateApply.name || "").trim() ||
-            `${template.name || "Schedule"} ${this.toISODate(targetStart)}`,
+          name: null,
           start_date: this.toISODate(targetStart),
           end_date: this.toISODate(targetEnd),
           type: this.templateApply.type,
@@ -1230,7 +1265,6 @@ export default {
         await this.loadShiftsForSelectedSchedule();
         this.jumpCalendarToDate(createdSchedule?.start_date || this.toISODate(targetStart));
         this.refreshScheduleEditorFromSelected();
-        this.showMessage("Schedule created from template.");
       } catch (e) {
         console.error(e);
         this.showMessage(e?.response?.data?.message || e?.message || "Failed to create from template.", "error");
@@ -1404,10 +1438,6 @@ export default {
       try {
         this.isCreatingSchedule = true;
         const range = this.computedScheduleRange;
-        if (!range) {
-          this.showMessage("Please choose a valid week and length.", "warning");
-          return;
-        }
 
         const payload = {
           name: null,
@@ -1429,13 +1459,112 @@ export default {
         this.jumpCalendarToDate(createdSchedule?.start_date || range.start_date);
         this.refreshScheduleEditorFromSelected();
 
-        this.showMessage(`Schedule created (${this.newSchedule.cadence}).`);
         this.saveSessionState();
       } catch (e) {
         console.error(e);
         this.showMessage("Failed to create schedule.", "error");
       } finally {
         this.isCreatingSchedule = false;
+      }
+    },
+
+    async repeatShifts() {
+      if (!this.canRepeatShifts) return;
+
+      try {
+        this.repeatShiftsDialog.saving = true;
+        const schedule = this.selectedSchedule;
+        const futureWeeks = Math.max(1, Number(this.repeatShiftsDialog.weeks) || 1);
+        const scheduleStart = new Date(`${schedule.start_date}T00:00:00`);
+        const firstWeekEnd = this.addDays(scheduleStart, 6);
+        const sourceShifts = this.shifts.filter((shift) => {
+          const shiftDate = new Date(`${shift.shift_date}T00:00:00`);
+          return shiftDate >= scheduleStart && shiftDate <= firstWeekEnd;
+        });
+
+
+
+        const existingKeys = new Set(
+          this.shifts.map((shift) =>
+            [
+              shift.shift_date,
+              this.toHHMM(shift.start_time),
+              this.toHHMM(shift.end_time),
+              shift.positionID || "",
+            ].join("|")
+          )
+        );
+
+        let createdCount = 0;
+        let assignmentCount = 0;
+        let scheduleExtendedTo = "";
+        for (let week = 1; week <= futureWeeks; week += 1) {
+          for (const shift of sourceShifts) {
+            const shiftedDate = this.addDays(new Date(`${shift.shift_date}T00:00:00`), week * 7);
+            const shiftDate = this.toISODate(shiftedDate);
+            const key = [
+              shiftDate,
+              this.toHHMM(shift.start_time),
+              this.toHHMM(shift.end_time),
+              shift.positionID || "",
+            ].join("|");
+
+            if (existingKeys.has(key)) continue;
+            existingKeys.add(key);
+
+            const createdShiftResponse = await shiftServices.create({
+              shift_date: shiftDate,
+              start_time: this.toHHMM(shift.start_time),
+              end_time: this.toHHMM(shift.end_time),
+              workers_required: shift.workers_required || 1,
+              scheduleID: schedule.ID,
+              positionID: shift.positionID || null,
+            });
+            const createdShift = createdShiftResponse?.data || createdShiftResponse;
+            const createdShiftID = createdShift?.ID ?? createdShift?.id ?? null;
+
+            if (createdShiftID) {
+              const assignments = this.userShiftAssignmentsByShiftID[shift.ID] || [];
+              for (const assignment of assignments) {
+                await userShiftServices.create({
+                  shiftID: createdShiftID,
+                  userID: assignment.userID,
+                  status: assignment.status || "assigned",
+                });
+                assignmentCount += 1;
+              }
+            }
+
+            createdCount += 1;
+          }
+        }
+
+        const currentEnd = new Date(`${schedule.end_date}T00:00:00`);
+        const repeatedEnd = this.addDays(scheduleStart, ((futureWeeks + 1) * 7) - 1);
+        if (repeatedEnd > currentEnd) {
+          scheduleExtendedTo = this.toISODate(repeatedEnd);
+          const updated = await scheduleServices.update(schedule.ID, {
+            end_date: scheduleExtendedTo,
+          });
+          const updatedSchedule = updated?.data || updated || {};
+          this.schedules = this.schedules.map((item) =>
+            Number(item.ID) === Number(schedule.ID)
+              ? { ...item, ...updatedSchedule, end_date: scheduleExtendedTo }
+              : item
+          );
+        }
+
+        await this.loadShiftsForSelectedSchedule();
+        this.closeRepeatShiftsDialog();
+        this.refreshScheduleEditorFromSelected();
+        
+
+        this.saveSessionState();
+      } catch (error) {
+        console.error("Failed to repeat shifts:", error?.response?.data || error);
+        this.showMessage(error?.response?.data?.message || "Failed to repeat shifts.", "error");
+      } finally {
+        this.repeatShiftsDialog.saving = false;
       }
     },
 
@@ -1497,7 +1626,25 @@ export default {
       };
     },
 
-    openCreateShiftForm(start, end) {
+    openCreateShift(selection = null) {
+    
+
+      let start;
+      let end;
+
+      if (selection?.start && selection?.end) {
+        start = new Date(selection.start);
+        end = new Date(selection.end);
+      } else {
+        const selectedDate =
+          this.$refs.managerCalendar?.getCurrentDate?.() ||
+          this.currentCalendarSchedule?.start_date ||
+          this.toISODate(new Date());
+
+        start = new Date(`${selectedDate}T09:00:00`);
+        end = new Date(`${selectedDate}T10:00:00`);
+      }
+
       this.shiftDialog.mode = "create";
       this.shiftDialog.shiftID = null;
       this.shiftDialog.form = {
@@ -1505,36 +1652,13 @@ export default {
         start_time: start.toTimeString().slice(0, 5),
         end_time: end.toTimeString().slice(0, 5),
         workers_required: Number(this.managerSettings.default_shift_workers_required) || 1,
-        positionID: this.positionItems[0]?.value ?? null,
+        positionID: null,
         assignedWorkerIDs: [],
       };
       this.shiftDialog.open = true;
     },
 
-    openCreateShiftFromButton() {
-      if (!this.selectedScheduleID) {
-        this.showMessage("Create or select a schedule first.", "warning");
-        return;
-      }
 
-      const selectedDate =
-        this.$refs.managerCalendar?.getCurrentDate?.() ||
-        this.currentCalendarSchedule?.start_date ||
-        this.toISODate(new Date());
-      const start = new Date(`${selectedDate}T09:00:00`);
-      const end = new Date(`${selectedDate}T10:00:00`);
-
-      this.openCreateShiftForm(start, end);
-    },
-
-    openCreateShiftModal(selection) {
-      if (!this.selectedScheduleID) {
-        this.showMessage("Create or select a schedule first.", "warning");
-        return;
-      }
-
-      this.openCreateShiftForm(new Date(selection.start), new Date(selection.end));
-    },
 
     async openEditShiftModal(event) {
       const shiftID = Number(event?.id ?? event?._def?.publicId ?? event?.extendedProps?.shiftID);
@@ -1592,7 +1716,8 @@ export default {
             createdShift?.data?.ID ??
             createdShift?.data?.id ??
             null;
-          // New shifts move non-template schedules back to draft while planning.
+
+            
           try {
             if (this.selectedSchedule?.type !== "template") {
               await scheduleServices.update(this.selectedScheduleID, { type: "draft" });
@@ -1609,7 +1734,7 @@ export default {
         }
 
         if (!shiftID) {
-          this.showMessage("Shift saved but shift ID was not returned.", "warning");
+
           await this.loadShiftsForSelectedSchedule();
           this.closeShiftDialog();
           return;
@@ -1668,11 +1793,7 @@ export default {
 
         await this.loadShiftsForSelectedSchedule();
         this.closeShiftDialog();
-        if (assignmentErrors.length > 0) {
-          this.showMessage(`Shift saved, but assignments failed: ${assignmentErrors[0]}`, "warning");
-        } else {
-          this.showMessage("Shift saved.");
-        }
+
       } catch (e) {
         console.error(e);
         const message =
@@ -1694,7 +1815,6 @@ export default {
         await shiftServices.delete(this.shiftDialog.shiftID);
         await this.loadShiftsForSelectedSchedule();
         this.closeShiftDialog();
-        this.showMessage("Shift deleted.");
       } catch (e) {
         console.error(e);
         this.showMessage("Failed to delete shift.", "error");

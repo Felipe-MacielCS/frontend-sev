@@ -6,9 +6,6 @@
           <div class="d-flex flex-wrap align-start justify-space-between ga-3 mb-4">
             <div>
               <h2 class="text-h6 font-weight-bold mb-1">Worker Settings</h2>
-              <div class="text-body-2 text-medium-emphasis">
-                These settings stay with your account across worker pages.
-              </div>
             </div>
             <v-chip
               v-if="requiresStudentIdSetup"
@@ -25,22 +22,20 @@
             type="info"
             variant="tonal"
             class="mb-5"
-            text="Enter your OC student ID to automatically import your class schedule as worker unavailability."
+            text="Enter your OC student ID to import your schedule for unavailability"
           />
 
           <v-card class="mb-5" variant="outlined">
             <v-card-title class="text-subtitle-1 font-weight-bold">Class Schedule Sync</v-card-title>
             <v-card-text>
-              <div class="text-body-2 mb-4">
-                Your student ID is used to pull your current classes from the OC schedule API and turn them into unavailability blocks automatically.
-              </div>
+
 
               <v-alert
                 v-if="studentIdLocked"
                 type="success"
                 variant="tonal"
                 class="mb-4"
-                text="Your student ID is locked. Class sync now runs automatically for your account."
+                text="Your student ID is locked"
               />
 
               <v-text-field
@@ -50,7 +45,6 @@
                 density="comfortable"
                 :readonly="studentIdLocked"
                 :disabled="studentIdLocked || savingStudentID"
-                hint="Numbers only. Once saved, this ID is locked and classes sync automatically."
                 persistent-hint
                 prepend-inner-icon="mdi-card-account-details-outline"
               />
@@ -80,15 +74,10 @@
                 @update:modelValue="saveDarkMode"
               />
 
-              <div class="text-caption text-medium-emphasis">
-                This only affects worker pages and will not change the login page.
-              </div>
+
             </v-card-text>
           </v-card>
 
-          <div v-if="loading || savingDarkMode || savingStudentID || syncingStudentSchedule" class="text-caption text-medium-emphasis mt-4">
-            Saving...
-          </div>
         </v-card>
       </v-col>
     </v-row>

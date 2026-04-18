@@ -24,18 +24,7 @@
             </v-btn>
           </div>
 
-          <v-alert v-if="departmentError" type="error" variant="tonal" class="mb-4">
-            {{ departmentError }}
-          </v-alert>
 
-          <v-alert
-            v-if="departmentMessage"
-            type="success"
-            variant="tonal"
-            class="mb-4"
-          >
-            {{ departmentMessage }}
-          </v-alert>
 
           <v-table>
             <thead>
@@ -90,18 +79,6 @@
             />
           </div>
 
-          <v-alert v-if="userError" type="error" variant="tonal" class="mb-4">
-            {{ userError }}
-          </v-alert>
-
-          <v-alert
-            v-if="userMessage"
-            type="success"
-            variant="tonal"
-            class="mb-4"
-          >
-            {{ userMessage }}
-          </v-alert>
 
           <v-table>
             <thead>
