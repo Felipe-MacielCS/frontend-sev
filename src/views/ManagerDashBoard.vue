@@ -91,14 +91,6 @@
           <v-btn
             variant="text"
             color="primary"
-            prepend-icon="mdi-file-document-outline"
-            to="/manager/templates"
-          >
-            Manage Templates
-          </v-btn>
-          <v-btn
-            variant="text"
-            color="primary"
             prepend-icon="mdi-content-copy"
             :disabled="!selectedSchedule"
             @click="openGenerateTemplateDialog"
@@ -113,6 +105,14 @@
             @click="openRepeatShiftsDialog"
           >
             Repeat Shifts
+          </v-btn>
+          <v-btn
+            variant="text"
+            color="primary"
+            prepend-icon="mdi-file-document-outline"
+            to="/manager/templates"
+          >
+            Manage Templates
           </v-btn>
         </div>
       </div>
