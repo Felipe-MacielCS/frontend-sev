@@ -1,60 +1,42 @@
 <template>
   <v-container fluid class="pa-6 bg-grey-lighten-4" style="min-height: 100vh;">
     <v-row>
-      <v-col cols="12" md="4">
-        <v-card class="pa-4 bg-grey-lighten-3" elevation="1">
-          <h2 class="text-h6 font-weight-bold mb-3">Clock In / Out</h2>
-
-          <div v-if="primaryShiftContext" class="text-body-2">
-            <div class="mb-2"><b>Shift Date:</b> {{ primaryShiftContext.shift.shift_date }}</div>
-            <div class="mb-2">
-              <b>Shift Time:</b>
-              {{ toHHMM(primaryShiftContext.shift.start_time) }} -
-              {{ toHHMM(primaryShiftContext.shift.end_time) }}
-            </div>
-            <div class="mb-4">
-              <b>Status:</b>
-              {{ primaryOpenRecord ? "Clocked In" : "Ready to Clock In" }}
-            </div>
-
-            <v-btn
-              color="primary"
-              block
-              :loading="clockActionLoading"
-              @click="handleClockAction"
-            >
-              {{ primaryOpenRecord ? "Clock Out" : "Clock In" }}
-            </v-btn>
-          </div>
-
-          <div v-else class="text-body-2 text-medium-emphasis">
-            No assigned official shift is available right now for clocking.
-          </div>
-        </v-card>
-      </v-col>
-
-      <v-col cols="12" md="8">
+      <v-col cols="12">
         <v-card elevation="2" class="bg-white rounded-lg">
-          <v-card-title class="d-flex align-center justify-space-between px-4 pt-4">
+          <v-card-title class="d-flex align-center justify-space-between flex-wrap ga-3 px-4 pt-4">
             <span class="text-subtitle-1 font-weight-bold">Time Log</span>
-            <v-btn variant="text" :loading="loading" @click="loadClockingData">Refresh</v-btn>
+            <div class="d-flex align-center ga-2">
+              <v-btn
+                icon="mdi-chevron-left"
+                variant="text"
+                color="primary"
+                class="clock-week-arrow"
+                @click="changeWeek(-1)"
+              />
+              <v-btn
+                variant="tonal"
+                color="primary"
+                class="clock-week-current"
+                @click="goToCurrentWeek"
+              >
+                This Week
+              </v-btn>
+              <v-btn
+                icon="mdi-chevron-right"
+                variant="text"
+                color="primary"
+                class="clock-week-arrow"
+                @click="changeWeek(1)"
+              />
+            </div>
           </v-card-title>
 
           <v-card-text>
-            <v-alert v-if="error" type="error" variant="tonal" class="mb-4">
-              {{ error }}
-            </v-alert>
+            <div class="text-body-2 font-weight-medium clock-week-label mb-4">
+              {{ weekLabel }}
+            </div>
 
-            <v-alert
-              v-else-if="timeRecords.length === 0 && !loading"
-              type="info"
-              variant="tonal"
-              class="mb-4"
-            >
-              No clock records yet.
-            </v-alert>
-
-            <v-table v-else>
+            <v-table v-if="weeklyTimeRecords.length">
               <thead>
                 <tr>
                   <th>Date</th>
@@ -65,8 +47,8 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="record in timeRecords" :key="record.id">
-                  <td>{{ record.shiftDate }}</td>
+                <tr v-for="record in weeklyTimeRecords" :key="record.id">
+                  <td>{{ formatDate(record.shiftDate) }}</td>
                   <td>{{ record.shiftLabel }}</td>
                   <td>{{ formatDateTime(record.clockInTime) }}</td>
                   <td>{{ record.clockOutTime ? formatDateTime(record.clockOutTime) : "Active" }}</td>
@@ -78,10 +60,6 @@
         </v-card>
       </v-col>
     </v-row>
-
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000" location="bottom right">
-      {{ snackbar.message }}
-    </v-snackbar>
   </v-container>
 </template>
 
@@ -96,24 +74,31 @@ export default {
   data() {
     return {
       loading: false,
-      clockActionLoading: false,
       error: "",
       assignmentContexts: [],
       timeRecords: [],
-      primaryShiftContext: null,
-      snackbar: {
-        show: false,
-        message: "",
-        color: "success",
-      },
+      weekStart: "",
     };
   },
   computed: {
-    primaryOpenRecord() {
-      return this.primaryShiftContext?.clockRecords?.find((record) => !record.clock_out_time) || null;
+    weekEnd() {
+      if (!this.weekStart) return "";
+      return this.toISODate(this.addDays(new Date(`${this.weekStart}T00:00:00`), 6));
+    },
+    weekLabel() {
+      if (!this.weekStart || !this.weekEnd) return "";
+      return `${this.formatDate(this.weekStart)} - ${this.formatDate(this.weekEnd)}`;
+    },
+    weeklyTimeRecords() {
+      if (!this.weekStart || !this.weekEnd) return this.timeRecords;
+      return this.timeRecords.filter((record) => {
+        const shiftDate = String(record.shiftDate || "").slice(0, 10);
+        return shiftDate >= this.weekStart && shiftDate <= this.weekEnd;
+      });
     },
   },
   async mounted() {
+    this.weekStart = this.toISODate(this.getStartOfWeek(new Date()));
     await this.loadClockingData();
   },
   methods: {
@@ -130,14 +115,41 @@ export default {
       const user = this.getCurrentUser();
       return this.normalizeID(user?.ID ?? user?.id ?? user?.userID);
     },
+    toHHMM(value) {
+      if (!value) return "00:00";
+      return String(value).slice(0, 5);
+    },
     isOfficialSchedule(schedule) {
       const type = String(schedule?.type || "").trim().toLowerCase();
       const status = String(schedule?.status || "").trim().toLowerCase();
       return type === "official" || status === "published";
     },
-    toHHMM(value) {
-      if (!value) return "00:00";
-      return String(value).slice(0, 5);
+    addDays(date, amount) {
+      const next = new Date(date);
+      next.setDate(next.getDate() + amount);
+      return next;
+    },
+    getStartOfWeek(date) {
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+      start.setDate(start.getDate() - start.getDay());
+      return start;
+    },
+    toISODate(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    },
+    formatDate(value) {
+      if (!value) return "-";
+      const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return date.toLocaleDateString(undefined, {
+        month: "numeric",
+        day: "numeric",
+        year: "numeric",
+      });
     },
     formatDateTime(value) {
       if (!value) return "-";
@@ -159,43 +171,20 @@ export default {
     getShiftDateTime(shift, key) {
       return new Date(`${shift.shift_date}T${this.toHHMM(shift[key])}:00`);
     },
-    getPrimaryShiftContext(contexts) {
-      if (!contexts.length) return null;
-
-      const withOpenRecord = contexts.find((context) =>
-        context.clockRecords.some((record) => !record.clock_out_time)
-      );
-      if (withOpenRecord) return withOpenRecord;
-
-      const now = new Date();
-      const today = now.toISOString().slice(0, 10);
-      const todayContexts = contexts.filter((context) => context.shift.shift_date === today);
-
-      const activeToday = todayContexts.find((context) => {
-        const start = this.getShiftDateTime(context.shift, "start_time");
-        const end = this.getShiftDateTime(context.shift, "end_time");
-        return start <= now && now <= end;
-      });
-      if (activeToday) return activeToday;
-
-      const upcomingToday = todayContexts.find(
-        (context) => this.getShiftDateTime(context.shift, "start_time") >= now
-      );
-      if (upcomingToday) return upcomingToday;
-
-      if (todayContexts.length) return todayContexts[0];
-
-      return contexts[0];
+    changeWeek(direction) {
+      const start = this.weekStart
+        ? new Date(`${this.weekStart}T00:00:00`)
+        : this.getStartOfWeek(new Date());
+      this.weekStart = this.toISODate(this.addDays(start, direction * 7));
     },
-    showMessage(message, color = "success") {
-      this.snackbar = { show: true, message, color };
+    goToCurrentWeek() {
+      this.weekStart = this.toISODate(this.getStartOfWeek(new Date()));
     },
     async loadClockingData() {
       this.loading = true;
       this.error = "";
       this.assignmentContexts = [];
       this.timeRecords = [];
-      this.primaryShiftContext = null;
 
       try {
         const userID = this.getCurrentUserID();
@@ -218,7 +207,6 @@ export default {
             .filter(Boolean)
             .map((shift) => [this.normalizeID(shift?.ID), shift])
         );
-
         const scheduleIDs = [...new Set(
           shifts
             .map((shift) => this.normalizeID(shift?.scheduleID))
@@ -259,9 +247,6 @@ export default {
             const bDate = this.getShiftDateTime(b.shift, "start_time");
             return bDate - aDate;
           });
-
-        this.primaryShiftContext = this.getPrimaryShiftContext(this.assignmentContexts);
-
         this.timeRecords = this.assignmentContexts
           .flatMap((context) =>
             context.clockRecords.map((record) => ({
@@ -274,34 +259,32 @@ export default {
           )
           .sort((a, b) => new Date(b.clockInTime) - new Date(a.clockInTime));
       } catch (error) {
-        console.error("Failed to load clocking data:", error?.response?.data || error);
         this.error = error?.response?.data?.message || "Failed to load clocking data.";
       } finally {
         this.loading = false;
       }
     },
-    async handleClockAction() {
-      const userShiftID = this.primaryShiftContext?.userShiftID;
-      if (!userShiftID) return;
-
-      try {
-        this.clockActionLoading = true;
-        if (this.primaryOpenRecord) {
-          await clockInOutServices.clockOut(userShiftID);
-          this.showMessage("Clocked out successfully.");
-        } else {
-          await clockInOutServices.clockIn(userShiftID);
-          this.showMessage("Clocked in successfully.");
-        }
-
-        await this.loadClockingData();
-      } catch (error) {
-        console.error("Clock action failed:", error?.response?.data || error);
-        this.showMessage(error?.response?.data?.message || "Clock action failed.", "error");
-      } finally {
-        this.clockActionLoading = false;
-      }
-    },
   },
 };
 </script>
+
+<style scoped>
+.clock-week-label {
+  color: #5f5f5f;
+  font-size: 1rem;
+}
+
+.clock-week-arrow {
+  min-width: 32px;
+  width: 32px;
+  height: 32px;
+  background: transparent !important;
+}
+
+.clock-week-current {
+  min-width: 112px;
+  height: 34px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+}
+</style>

@@ -5,9 +5,6 @@
         <div class="page-header mb-6">
           <div class="text-overline page-kicker">Worker Updates</div>
           <h1 class="text-h4 font-weight-bold mb-2">Announcements</h1>
-          <p class="text-body-1 text-medium-emphasis mb-0">
-            Review every announcement sent to your department.
-          </p>
         </div>
 
         <v-card class="rounded-xl announcements-card" elevation="2">
@@ -15,20 +12,7 @@
             <div class="history-toolbar mb-4">
               <div>
                 <div class="text-subtitle-1 font-weight-bold">Department Announcement Feed</div>
-                <div class="text-body-2 text-medium-emphasis">
-                  Messages from your manager appear here in newest-first order.
-                </div>
               </div>
-
-              <v-btn
-                variant="tonal"
-                color="primary"
-                class="text-none"
-                :loading="loading"
-                @click="loadAnnouncements"
-              >
-                Refresh
-              </v-btn>
             </div>
 
             <v-progress-linear
@@ -38,17 +22,8 @@
               class="mb-4"
             />
 
-            <v-alert
-              v-if="errorMessage"
-              type="error"
-              variant="tonal"
-              class="mb-4"
-            >
-              {{ errorMessage }}
-            </v-alert>
-
             <div v-if="!loading && !announcements.length && !errorMessage" class="empty-history">
-              No announcements have been posted for your department yet.
+              No announcements
             </div>
 
             <v-card
