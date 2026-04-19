@@ -7,43 +7,7 @@
             <div>
               <h2 class="text-h6 font-weight-bold mb-1">Worker Settings</h2>
             </div>
-            <v-chip
-              v-if="requiresStudentIdSetup"
-              color="warning"
-              variant="tonal"
-              prepend-icon="mdi-school-outline"
-            >
-              Student ID setup needed
-            </v-chip>
           </div>
-
-          <v-card class="mb-5" variant="outlined">
-            <v-card-title class="text-subtitle-1 font-weight-bold">Class Schedule Sync</v-card-title>
-            <v-card-text>
-
-
-              <v-text-field
-                v-model="studentID"
-                label="OC Student ID"
-                variant="outlined"
-                density="comfortable"
-                :readonly="studentIdLocked"
-                :disabled="studentIdLocked || savingStudentID"
-                persistent-hint
-                prepend-inner-icon="mdi-card-account-details-outline"
-              />
-
-              <div v-if="!studentIdLocked" class="d-flex flex-wrap ga-2 mt-4">
-                <v-btn
-                  color="primary"
-                  :loading="savingStudentID"
-                  @click="saveStudentId"
-                >
-                  Save Student ID
-                </v-btn>
-              </div>
-            </v-card-text>
-          </v-card>
 
           <v-card variant="outlined">
             <v-card-title class="text-subtitle-1 font-weight-bold">Appearance</v-card-title>
@@ -57,11 +21,12 @@
                 class="mb-2"
                 @update:modelValue="saveDarkMode"
               />
-
-
             </v-card-text>
           </v-card>
 
+          <div v-if="loading || savingDarkMode || syncingStudentSchedule" class="text-caption text-medium-emphasis mt-4">
+            Saving...
+          </div>
         </v-card>
       </v-col>
     </v-row>
@@ -91,13 +56,6 @@ const WORKER_DARK_MODE_SETTING = {
   default_value: "false",
   description: "Test toggle for the worker interface theme.",
 };
-const WORKER_STUDENT_ID_SETTING = {
-  key: "oc_student_id",
-  label: "OC Student ID",
-  value_type: "string",
-  default_value: "",
-  description: "OC student ID used to import class times into worker unavailability.",
-};
 
 export default {
   name: "WorkerSettings",
@@ -105,15 +63,10 @@ export default {
     return {
       loading: false,
       savingDarkMode: false,
-      savingStudentID: false,
       syncingStudentSchedule: false,
       darkModeSettingID: null,
       darkModeValueRowID: null,
-      studentSettingID: null,
-      studentValueRowID: null,
       darkModeEnabled: false,
-      studentID: "",
-      studentScheduleConfigured: false,
       initialized: false,
       snackbar: {
         show: false,
@@ -123,14 +76,8 @@ export default {
     };
   },
   computed: {
-    requiresStudentIdSetup() {
-      const currentUser = this.getCurrentUser();
-      return Boolean(
-        currentUser?.needsStudentIdSetup || this.$route?.query?.setup === "student-id"
-      );
-    },
-    studentIdLocked() {
-      return this.studentScheduleConfigured && Boolean(this.studentValueRowID);
+    currentUserEmail() {
+      return String(this.getCurrentUser()?.email ?? "").trim();
     },
   },
   async mounted() {
@@ -152,9 +99,6 @@ export default {
       const id = Number(raw);
       return Number.isFinite(id) && id > 0 ? id : null;
     },
-    normalizeStudentID(raw) {
-      return String(raw ?? "").replace(/\D+/g, "");
-    },
     getCurrentUserID() {
       const user = this.getCurrentUser();
       return this.normalizeID(user?.ID ?? user?.id ?? user?.userID);
@@ -175,34 +119,24 @@ export default {
         const userID = this.getCurrentUserID();
         if (!userID) return;
 
-        const [darkSetting, studentSetting] = await Promise.all([
-          this.ensureSettingDefinition(WORKER_DARK_MODE_SETTING),
-          this.ensureSettingDefinition(WORKER_STUDENT_ID_SETTING),
-        ]);
-
+        const darkSetting = await this.ensureSettingDefinition(WORKER_DARK_MODE_SETTING);
         this.darkModeSettingID = darkSetting?.ID ?? null;
-        this.studentSettingID = studentSetting?.ID ?? null;
 
-        const [darkRows, studentRows] = await Promise.all([
-          settingsValuesServices.getAll({
-            userID,
-            settingID: this.darkModeSettingID,
-          }),
-          settingsValuesServices.getAll({
-            userID,
-            settingID: this.studentSettingID,
-          }),
-        ]);
+        const darkRows = await settingsValuesServices.getAll({
+          userID,
+          settingID: this.darkModeSettingID,
+        });
 
         const darkRow = Array.isArray(darkRows) ? darkRows[0] : null;
-        const studentRow = Array.isArray(studentRows) ? studentRows[0] : null;
 
         this.darkModeValueRowID = darkRow?.ID ?? null;
-        this.studentValueRowID = studentRow?.ID ?? null;
         this.darkModeEnabled =
           String(darkRow?.value ?? darkSetting?.default_value ?? "false").trim().toLowerCase() === "true";
-        this.studentID = this.normalizeStudentID(studentRow?.value ?? "");
-        this.studentScheduleConfigured = Boolean(this.studentID);
+
+        this.setStoredUserFlags({
+          studentScheduleConfigured: Boolean(this.currentUserEmail),
+          needsStudentIdSetup: false,
+        });
       } catch (error) {
         console.error("Failed to load worker settings:", error?.response?.data || error);
         this.showMessage(error?.response?.data?.message || "Failed to load settings.", "error");
@@ -241,66 +175,29 @@ export default {
         this.savingDarkMode = false;
       }
     },
-    async saveStudentId() {
-      const userID = this.getCurrentUserID();
-      if (!userID || !this.studentSettingID) return;
-      if (this.studentIdLocked) return;
-
-      const normalizedStudentID = this.normalizeStudentID(this.studentID);
-      this.studentID = normalizedStudentID;
-
-      try {
-        this.savingStudentID = true;
-
-        if (!normalizedStudentID) {
-          this.showMessage("Enter your student ID to enable automatic class sync.", "warning");
-          return;
-        }
-
-        const payload = {
-          settingID: this.studentSettingID,
-          userID,
-          value: normalizedStudentID,
-        };
-
-        if (this.studentValueRowID) {
-          await settingsValuesServices.update(this.studentValueRowID, payload);
-        } else {
-          const created = await settingsValuesServices.create(payload);
-          this.studentValueRowID = created?.ID ?? null;
-        }
-
-        this.studentScheduleConfigured = true;
-        this.setStoredUserFlags({
-          studentScheduleConfigured: true,
-          needsStudentIdSetup: false,
-        });
-
-        await this.syncStudentScheduleNow("Student ID saved.");
-
-        if (this.$route?.query?.setup === "student-id") {
-          this.$router.replace({ name: "workerSettings" });
-        }
-      } catch (error) {
-        console.error("Failed to save student ID:", error?.response?.data || error);
-        this.showMessage(error?.response?.data?.message || "Failed to save student ID.", "error");
-      } finally {
-        this.savingStudentID = false;
-      }
-    },
     async syncStudentScheduleNow(successPrefix = "Class schedule synced.") {
       const userID = this.getCurrentUserID();
-      if (!userID || !this.studentScheduleConfigured) return;
+      if (!userID) return;
+      if (!this.currentUserEmail) {
+        this.showMessage("No OC email was found for your account.", "warning");
+        return;
+      }
 
       try {
         this.syncingStudentSchedule = true;
         const response = await calendarServices.syncStudentSchedule({ userID });
         const imported = Number(response?.imported ?? 0);
+
+        this.setStoredUserFlags({
+          studentScheduleConfigured: true,
+          needsStudentIdSetup: false,
+        });
+
         this.showMessage(`${successPrefix} Imported ${imported} class block${imported === 1 ? "" : "s"}.`);
       } catch (error) {
         console.error("Failed to sync student schedule:", error?.response?.data || error);
         this.showMessage(
-          error?.response?.data?.message || "Student ID saved, but class sync failed.",
+          error?.response?.data?.message || "Class schedule sync failed.",
           "warning"
         );
       } finally {
