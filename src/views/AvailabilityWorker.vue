@@ -397,7 +397,7 @@ export default {
         if (error?.response?.status === 400) {
           this.updateStoredUserFlags({
             studentScheduleConfigured: false,
-            needsStudentIdSetup: true,
+            needsStudentIdSetup: false,
           });
           return;
         }
@@ -767,6 +767,8 @@ export default {
 :deep(.fc-header-toolbar) {
 }
 </style>
+
+
 
 
 
