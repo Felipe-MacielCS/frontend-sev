@@ -5,10 +5,7 @@
         <v-card class="hero-card pa-5" elevation="2">
           <div class="text-overline page-kicker">Admin Controls</div>
           <div class="text-h5 font-weight-bold mb-2">Department and user administration</div>
-          <div class="text-body-1 text-medium-emphasis">
-            Manage departments, assign users to departments, and change whether someone is a worker,
-            manager, or admin.
-          </div>
+
         </v-card>
       </v-col>
     </v-row>
@@ -19,9 +16,7 @@
           <div class="d-flex align-center justify-space-between mb-4">
             <div>
               <div class="text-h6 font-weight-bold">Departments</div>
-              <div class="text-body-2 text-medium-emphasis">
-                Create, update, and delete departments.
-              </div>
+
             </div>
 
             <v-btn color="#8b1e1e" class="text-white" elevation="0" @click="startCreateDepartment">
@@ -29,18 +24,7 @@
             </v-btn>
           </div>
 
-          <v-alert v-if="departmentError" type="error" variant="tonal" class="mb-4">
-            {{ departmentError }}
-          </v-alert>
 
-          <v-alert
-            v-if="departmentMessage"
-            type="success"
-            variant="tonal"
-            class="mb-4"
-          >
-            {{ departmentMessage }}
-          </v-alert>
 
           <v-table>
             <thead>
@@ -82,9 +66,7 @@
           <div class="d-flex flex-wrap align-center justify-space-between ga-3 mb-4">
             <div>
               <div class="text-h6 font-weight-bold">Users</div>
-              <div class="text-body-2 text-medium-emphasis">
-                Review every user and manage role plus department assignment.
-              </div>
+
             </div>
 
             <v-text-field
@@ -97,18 +79,6 @@
             />
           </div>
 
-          <v-alert v-if="userError" type="error" variant="tonal" class="mb-4">
-            {{ userError }}
-          </v-alert>
-
-          <v-alert
-            v-if="userMessage"
-            type="success"
-            variant="tonal"
-            class="mb-4"
-          >
-            {{ userMessage }}
-          </v-alert>
 
           <v-table>
             <thead>
@@ -251,9 +221,7 @@
 
         <template v-if="!userDialog.form.isAdmin">
           <div class="text-subtitle-1 font-weight-bold mb-2">Department Assignments</div>
-          <div class="text-body-2 text-medium-emphasis mb-3">
-            Add one or more departments and set the role for each assignment.
-          </div>
+
 
           <v-card variant="outlined" class="pa-3 mb-3 admin-assignment-card">
             <div
@@ -310,7 +278,7 @@
           variant="tonal"
           class="mb-3"
         >
-          Admin users are global and do not need department assignments.
+          Admins do not need departments
         </v-alert>
 
         <div class="d-flex justify-end ga-2 mt-4">
@@ -335,7 +303,7 @@ import departmentServices from "../services/departmentServices.js";
 import departmentUsersServices from "../services/departmentUsersServices.js";
 import userServices from "../services/userServices.js";
 
-const DEFAULT_DEPARTMENT_FORM = () => ({
+const DEFAULT_DEPARTMENT = () => ({
   ID: null,
   name: "",
   location: "",
@@ -343,7 +311,7 @@ const DEFAULT_DEPARTMENT_FORM = () => ({
   email: "",
 });
 
-const DEFAULT_USER_FORM = () => ({
+const DEFAULT_USER = () => ({
   isAdmin: false,
   status: "active",
   assignments: [],
@@ -369,7 +337,7 @@ export default {
         open: false,
         saving: false,
         error: "",
-        form: DEFAULT_DEPARTMENT_FORM(),
+        form: DEFAULT_DEPARTMENT(),
       },
       userDialog: {
         open: false,
@@ -377,7 +345,7 @@ export default {
         error: "",
         user: null,
         assignment: null,
-        form: DEFAULT_USER_FORM(),
+        form: DEFAULT_USER(),
       },
       departmentRoleOptions: ["Manager", "Worker"],
     };
@@ -525,7 +493,7 @@ export default {
         open: true,
         saving: false,
         error: "",
-        form: DEFAULT_DEPARTMENT_FORM(),
+        form: DEFAULT_DEPARTMENT(),
       };
     },
     startEditDepartment(department) {
@@ -547,7 +515,7 @@ export default {
         open: false,
         saving: false,
         error: "",
-        form: DEFAULT_DEPARTMENT_FORM(),
+        form: DEFAULT_DEPARTMENT(),
       };
     },
     async saveDepartment() {
@@ -631,7 +599,7 @@ export default {
         error: "",
         user: null,
         assignment: null,
-        form: DEFAULT_USER_FORM(),
+        form: DEFAULT_USER(),
       };
     },
     async saveUser() {

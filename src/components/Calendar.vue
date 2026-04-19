@@ -21,6 +21,7 @@ export default {
     height: { type: [Number, String], default: "auto" },
     contentHeight: { type: [Number, String], default: "auto" },
     firstDay: { type: Number, default: 0 },
+    slotEventOverlap: { type: Boolean, default: true },
   },
   data() {
     return {
@@ -37,6 +38,7 @@ export default {
         contentHeight: this.contentHeight,
         expandRows: true,
         slotMinTime: "05:00:00",
+        slotEventOverlap: this.slotEventOverlap,
         events: this.events,
         editable: this.isEditable,
         selectable: this.isSelectable,
@@ -98,6 +100,14 @@ export default {
       const api = this.$refs.fc?.getApi();
       if (api) {
         api.setOption("firstDay", newValue);
+        this.$nextTick(() => setTimeout(() => this.updateSize(), 0));
+      }
+    },
+    slotEventOverlap(newValue) {
+      this.calendarOptions.slotEventOverlap = newValue;
+      const api = this.$refs.fc?.getApi();
+      if (api) {
+        api.setOption("slotEventOverlap", newValue);
         this.$nextTick(() => setTimeout(() => this.updateSize(), 0));
       }
     },
