@@ -152,6 +152,7 @@ const navItems = [
   { title: "Tasklists", to: "/manager/tasklists", icon: "mdi-format-list-bulleted" },
   { title: "Announcements", to: "/manager/announcements", icon: "mdi-bullhorn-outline" },
   { title: "Unvailability", to: "/manager/availability", icon: "mdi-calendar-clock-outline" },
+  { title: "Clock-In Kiosk", to: "/manager/clockin", icon: "mdi-clock-outline" },
   { title: "Settings", to: "/manager/settings", icon: "mdi-cog-outline" },
 ];
 </script>

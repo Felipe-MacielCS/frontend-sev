@@ -27,7 +27,7 @@ window.updateUserState = () => {
 };
 
 const showNav = computed(() => {
-  return route.path !== "/" && route.path !== "/login" && route.path !== "/signup"; 
+  return route.path !== "/" && route.path !== "/login" && route.path !== "/signup" && !route.meta?.kiosk; 
 });
 
 const isManagerRoute = computed(() => route.path.startsWith("/manager"));
