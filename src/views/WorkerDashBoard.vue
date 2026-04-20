@@ -42,6 +42,7 @@
           :height="760"
           :contentHeight="700"
           :slotEventOverlap="false"
+          @shift-clicked="openShiftTaskList"
         />
       </div>
     </v-card>
@@ -127,6 +128,7 @@ export default {
               textColor: "#ffffff",
               extendedProps: {
                 shiftID: shift.ID,
+                userShiftID: assignment.ID,
                 positionID: shift.positionID || null,
               },
             };
@@ -154,6 +156,13 @@ export default {
     toHHMM(value) {
       if (!value) return "00:00";
       return String(value).slice(0, 5);
+    },
+    openShiftTaskList(event) {
+      const userShiftID = this.normalizeUserID(
+        event?.extendedProps?.userShiftID ?? event?.id?.split?.("-")?.[1]
+      );
+      if (!userShiftID) return;
+      this.$router.push({ name: "workerTaskList", params: { userShiftID } });
     },
     async getWorkerDepartmentID() {
       const workerID = this.currentUserID;
