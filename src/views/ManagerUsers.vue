@@ -196,15 +196,28 @@
                         <th>Clock In</th>
                         <th>Clock Out</th>
                         <th>Time Worked</th>
+                        <th class="text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr v-for="record in clockHistory.records" :key="record.id">
                         <td>{{ record.shiftDate }}</td>
                         <td>{{ record.shiftLabel }}</td>
-                        <td>{{ formatClockDateTime(record.clockInTime) }}</td>
-                        <td>{{ record.clockOutTime ? formatClockDateTime(record.clockOutTime) : "Active" }}</td>
+                        <td>{{ record.clockInTime ? formatClockDateTime(record.clockInTime) : "-" }}</td>
+                        <td>{{ record.isMissingLog ? "-" : record.clockOutTime ? formatClockDateTime(record.clockOutTime) : "Active" }}</td>
                         <td>{{ formatWorkedDuration(record.clockInTime, record.clockOutTime) }}</td>
+                        <td class="text-right">
+                          <v-btn
+                            size="small"
+                            variant="tonal"
+                            color="primary"
+                            prepend-icon="mdi-pencil"
+                            class="clock-edit-btn"
+                            @click="openClockCorrectionDialog(record)"
+                          >
+                            {{ record.isMissingLog ? "Add Log" : "Edit" }}
+                          </v-btn>
+                        </td>
                       </tr>
                     </tbody>
                   </v-table>
@@ -350,15 +363,28 @@
                     <th>Clock In</th>
                     <th>Clock Out</th>
                     <th>Time Worked</th>
+                    <th class="text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="record in clockHistory.records" :key="record.id">
                     <td>{{ record.shiftDate }}</td>
                     <td>{{ record.shiftLabel }}</td>
-                    <td>{{ formatClockDateTime(record.clockInTime) }}</td>
-                    <td>{{ record.clockOutTime ? formatClockDateTime(record.clockOutTime) : "Active" }}</td>
+                    <td>{{ record.clockInTime ? formatClockDateTime(record.clockInTime) : "-" }}</td>
+                    <td>{{ record.isMissingLog ? "-" : record.clockOutTime ? formatClockDateTime(record.clockOutTime) : "Active" }}</td>
                     <td>{{ formatWorkedDuration(record.clockInTime, record.clockOutTime) }}</td>
+                    <td class="text-right">
+                      <v-btn
+                        size="small"
+                        variant="tonal"
+                        color="primary"
+                        prepend-icon="mdi-pencil"
+                        class="clock-edit-btn"
+                        @click="openClockCorrectionDialog(record)"
+                      >
+                        {{ record.isMissingLog ? "Add Log" : "Edit" }}
+                      </v-btn>
+                    </td>
                   </tr>
                 </tbody>
               </v-table>
@@ -382,6 +408,57 @@
     </v-card>
   </v-dialog>
   </v-container>
+
+  <v-dialog v-model="clockCorrectionDialog.open" max-width="560">
+    <v-card class="pa-4">
+      <div class="d-flex align-center justify-space-between mb-3">
+        <div>
+          <div class="text-h6 font-weight-bold">
+            {{ clockCorrectionDialog.mode === "create" ? "Add Clock Log" : "Edit Clock Log" }}
+          </div>
+          <div class="text-body-2 text-medium-emphasis">
+            {{ clockCorrectionDialog.record?.shiftDate }}
+            {{ clockCorrectionDialog.record?.shiftLabel }}
+          </div>
+        </div>
+        <v-btn icon="mdi-close" variant="text" @click="closeClockCorrectionDialog" />
+      </div>
+
+      <v-text-field
+        v-model="clockCorrectionDialog.form.clockIn"
+        label="Clock in"
+        type="datetime-local"
+        variant="outlined"
+        density="comfortable"
+        class="mb-3"
+      />
+
+      <v-text-field
+        v-model="clockCorrectionDialog.form.clockOut"
+        label="Clock out"
+        type="datetime-local"
+        variant="outlined"
+        density="comfortable"
+      />
+
+      <div v-if="clockCorrectionDialog.error" class="clock-correction-error mt-3">
+        {{ clockCorrectionDialog.error }}
+      </div>
+
+      <div class="d-flex justify-end ga-2 mt-5">
+        <v-btn variant="text" @click="closeClockCorrectionDialog">Cancel</v-btn>
+        <v-btn
+          color="#8b1e1e"
+          class="text-white"
+          :loading="clockCorrectionDialog.saving"
+          :disabled="clockCorrectionDialog.saving"
+          @click="saveClockCorrection"
+        >
+          Approved
+        </v-btn>
+      </div>
+    </v-card>
+  </v-dialog>
 
   <v-dialog v-model="managePositionsDialog.open" max-width="860">
     <v-card class="pa-4">
@@ -665,6 +742,17 @@ export default {
         loading: false,
         error: "",
         records: [],
+      },
+      clockCorrectionDialog: {
+        open: false,
+        saving: false,
+        mode: "update",
+        record: null,
+        form: {
+          clockIn: "",
+          clockOut: "",
+        },
+        error: "",
       },
     };
   },
@@ -1078,6 +1166,45 @@ export default {
       if (Number.isNaN(date.getTime())) return String(value);
       return date.toLocaleString();
     },
+    toDateTimeLocal(value) {
+      if (!value) return "";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      const offsetMs = date.getTimezoneOffset() * 60000;
+      return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+    },
+    getShiftDateTimeLocal(record, key) {
+      const time = key === "end" ? record?.shiftEndTime : record?.shiftStartTime;
+      if (!record?.shiftDate || !time) return "";
+      return this.toDateTimeLocal(`${record.shiftDate}T${String(time).slice(0, 5)}:00`);
+    },
+    normalizeClockInput(value) {
+      if (!value) return "";
+      const raw = String(value).trim();
+      const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+      if (isoMatch) {
+        return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}T${isoMatch[4]}:${isoMatch[5]}:00`;
+      }
+
+      const localMatch = raw.match(
+        /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*(AM|PM)?$/i
+      );
+      if (localMatch) {
+        const month = String(localMatch[1]).padStart(2, "0");
+        const day = String(localMatch[2]).padStart(2, "0");
+        const year = localMatch[3];
+        let hour = Number(localMatch[4]);
+        const minute = String(localMatch[5]).padStart(2, "0");
+        const meridiem = String(localMatch[6] || "").toUpperCase();
+        if (meridiem === "PM" && hour < 12) hour += 12;
+        if (meridiem === "AM" && hour === 12) hour = 0;
+        return `${year}-${month}-${day}T${String(hour).padStart(2, "0")}:${minute}:00`;
+      }
+
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return "";
+      return `${this.toDateTimeLocal(parsed)}:00`;
+    },
     formatWorkedDuration(clockInTime, clockOutTime) {
       if (!clockInTime) return "-";
       const start = new Date(clockInTime);
@@ -1115,12 +1242,33 @@ export default {
             ]);
 
             const rows = Array.isArray(clockRecords) ? clockRecords : [];
+            const shiftDate = shift?.shift_date || "Unknown date";
+            const shiftStartTime = String(shift?.start_time || "").slice(0, 5);
+            const shiftEndTime = String(shift?.end_time || "").slice(0, 5);
+            if (!rows.length) {
+              return [{
+                id: `missing-${userShiftID}`,
+                userShiftID,
+                shiftDate,
+                shiftLabel: `${shiftStartTime} - ${shiftEndTime}`,
+                shiftStartTime,
+                shiftEndTime,
+                clockInTime: null,
+                clockOutTime: null,
+                isMissingLog: true,
+              }];
+            }
+
             return rows.map((record) => ({
               id: record.ID,
-              shiftDate: shift?.shift_date || "Unknown date",
-              shiftLabel: `${String(shift?.start_time || "").slice(0, 5)} - ${String(shift?.end_time || "").slice(0, 5)}`,
+              userShiftID,
+              shiftDate,
+              shiftLabel: `${shiftStartTime} - ${shiftEndTime}`,
+              shiftStartTime,
+              shiftEndTime,
               clockInTime: record.clock_in_time,
               clockOutTime: record.clock_out_time,
+              isMissingLog: false,
             }));
           })
         );
@@ -1128,7 +1276,11 @@ export default {
         this.clockHistory = {
           loading: false,
           error: "",
-          records: historyRows.flat().sort((a, b) => new Date(b.clockInTime) - new Date(a.clockInTime)),
+          records: historyRows.flat().sort((a, b) => {
+            const aTime = new Date(a.clockInTime || `${a.shiftDate}T${a.shiftStartTime || "00:00"}:00`);
+            const bTime = new Date(b.clockInTime || `${b.shiftDate}T${b.shiftStartTime || "00:00"}:00`);
+            return bTime - aTime;
+          }),
         };
       } catch (error) {
         console.error("Failed to load clock history:", error?.response?.data || error);
@@ -1142,6 +1294,83 @@ export default {
     async reloadClockHistoryForDialog(source) {
       const user = source === "edit" ? this.editDialog.user : this.viewDialog.user;
       await this.loadClockHistoryForUser(user);
+    },
+    openClockCorrectionDialog(record) {
+      this.clockCorrectionDialog = {
+        open: true,
+        saving: false,
+        mode: record.isMissingLog ? "create" : "update",
+        record,
+        form: {
+          clockIn: record.clockInTime
+            ? this.toDateTimeLocal(record.clockInTime)
+            : this.getShiftDateTimeLocal(record, "start"),
+          clockOut: record.clockOutTime
+            ? this.toDateTimeLocal(record.clockOutTime)
+            : this.getShiftDateTimeLocal(record, "end"),
+        },
+        error: "",
+      };
+    },
+    closeClockCorrectionDialog() {
+      this.clockCorrectionDialog = {
+        open: false,
+        saving: false,
+        mode: "update",
+        record: null,
+        form: {
+          clockIn: "",
+          clockOut: "",
+        },
+        error: "",
+      };
+    },
+    async saveClockCorrection() {
+      const record = this.clockCorrectionDialog.record;
+      if (!record) return;
+      const clockInValue = this.normalizeClockInput(this.clockCorrectionDialog.form.clockIn);
+      const clockOutValue = this.normalizeClockInput(this.clockCorrectionDialog.form.clockOut);
+      const clockIn = new Date(clockInValue);
+      const clockOut = clockOutValue ? new Date(clockOutValue) : null;
+      if (
+        !clockInValue ||
+        Number.isNaN(clockIn.getTime()) ||
+        (clockOut && Number.isNaN(clockOut.getTime())) ||
+        (clockOut && clockOut < clockIn)
+      ) {
+        this.clockCorrectionDialog.error = "Enter valid clock times.";
+        return;
+      }
+
+      const payload = {
+        user_shift_id: record.userShiftID,
+        clock_in_time: clockInValue,
+        clock_out_time: clockOutValue || null,
+      };
+
+      this.clockCorrectionDialog = {
+        ...this.clockCorrectionDialog,
+        saving: true,
+        error: "",
+      };
+
+      try {
+        if (this.clockCorrectionDialog.mode === "create") {
+          await clockInOutServices.create(payload);
+        } else {
+          await clockInOutServices.update(record.id, payload);
+        }
+
+        const activeUser = this.editDialog.open ? this.editDialog.user : this.viewDialog.user;
+        await this.loadClockHistoryForUser(activeUser);
+        this.closeClockCorrectionDialog();
+      } catch (error) {
+        this.clockCorrectionDialog = {
+          ...this.clockCorrectionDialog,
+          saving: false,
+          error: error?.response?.data?.message || "Could not save clock change.",
+        };
+      }
     },
 
     async saveEditUserDialog() {
@@ -1691,5 +1920,16 @@ export default {
   max-height: 26vh;
   overflow-y: auto;
   padding-right: 8px;
+}
+
+.clock-correction-error {
+  color: #b3261e;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.clock-edit-btn {
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 </style>
