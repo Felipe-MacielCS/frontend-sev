@@ -4,7 +4,7 @@
       <v-col cols="12" md="4" lg="3">
         <v-card class="mb-4 rounded-xl filter-card" elevation="2">
           <v-card-title class="text-subtitle-1 font-weight-bold">
-            Team Availability
+            Team Unavailability
           </v-card-title>
           <v-card-text>
             <v-select
@@ -46,7 +46,7 @@
         <v-card class="rounded-xl calendar-card" elevation="2">
           <v-card-title class="d-flex flex-wrap align-center justify-space-between ga-3">
             <div>
-              <div class="text-h6 font-weight-bold">Manager Availability Board</div>
+              <div class="text-h6 font-weight-bold">Manager Unvailability Board</div>
             </div>
 
             <v-chip color="primary" variant="tonal" size="small">

@@ -1,107 +1,62 @@
 <template>
   <v-container fluid class="pa-6 bg-grey-lighten-4" style="min-height: 100vh;">
-    <v-row>
-      <v-col cols="12" md="3" lg="3">
-        <v-card class="mb-4 pa-4 bg-grey-lighten-3 workspace-rail" elevation="1">
-          <div class="d-flex align-center justify-space-between mb-4">
-            <div>
-              <div class="text-subtitle-1 font-weight-bold">Schedule Builder</div>
-            </div>
-            <v-btn color="primary" size="small" icon="mdi-plus" @click="createScheduleDialog = true" />
+    <v-card elevation="2" class="pa-4 bg-white rounded-lg workspace-shell">
+      <div class="workspace-header mb-4">
+        <div class="d-flex align-center justify-space-between flex-wrap ga-3 mb-4">
+          <div>
+            <div class="text-overline workspace-kicker">Schedule</div>
+            <div class="text-h5 font-weight-bold">{{ currentCalendarScheduleName }}</div>
           </div>
 
-          <v-btn
-            color="primary"
-            block
-            size="large"
-            class="mb-4 new-schedule-btn"
-            prepend-icon="mdi-plus-circle-outline"
-            @click="createScheduleDialog = true"
-          >
-            New Schedule
-          </v-btn>
-
-          <div class="d-flex flex-column ga-2 workspace-switcher">
-            <v-btn
-              color="primary"
-              :variant="activePanel === 'schedules' ? 'flat' : 'tonal'"
-              block
-              prepend-icon="mdi-calendar-month-outline"
-              @click="activePanel = 'schedules'"
-            >
-              Schedules
-            </v-btn>
-            <v-btn
-              color="primary"
-              :variant="activePanel === 'templates' ? 'flat' : 'tonal'"
-              block
-              prepend-icon="mdi-file-document-outline"
-              @click="activePanel = 'templates'"
-            >
-              Templates
-            </v-btn>
+          <div class="d-flex align-center flex-wrap justify-end ga-2">
+            <v-chip size="small" variant="outlined" color="error">
+              {{ unassignedShiftCount }} unassigned
+            </v-chip>
           </div>
-        </v-card>
+        </div>
 
-        <v-card v-if="activePanel === 'schedules'" class="mb-4 pa-4 bg-grey-lighten-3 browser-card" elevation="1">
-          <div class="d-flex align-center justify-space-between mb-3">
-            <div>
-              <div class="text-subtitle-1 font-weight-bold">Schedules</div>
-              <div class="text-caption text-medium-emphasis">Pick one and work directly in the calendar.</div>
-            </div>
-            <v-chip size="small" variant="tonal" color="primary">{{ scheduleItems.length }}</v-chip>
-          </div>
-
-          <v-select
-            v-model="selectedScheduleID"
-            label="Open Schedule"
-            :items="scheduleItems"
-            item-title="label"
-            item-value="value"
-            variant="outlined"
-            density="compact"
-            hide-details
-            class="mb-3"
-            @update:modelValue="onScheduleSelected"
-          />
-
-          <div v-if="selectedSchedule" class="text-body-2">
-            <v-sheet rounded="lg" class="pa-3 mb-3 schedule-summary-sheet" border>
-              <div class="text-subtitle-2 font-weight-bold mb-1">
-                {{ selectedSchedule.name || "Untitled Schedule" }}
-              </div>
-              <div class="text-caption text-medium-emphasis mb-2">
-                {{ selectedSchedule.start_date }} to {{ selectedSchedule.end_date }}
-              </div>
-              <v-chip size="x-small" variant="tonal" color="primary">
-                {{ currentCalendarScheduleTypeLabel }}
-              </v-chip>
-            </v-sheet>
-
-            <v-text-field
-              v-model="scheduleEditor.name"
-              label="Rename Schedule"
-              variant="outlined"
-              density="compact"
-              hide-details
-              class="mb-2"
-            />
-
+        <v-row dense class="align-end schedule-toolbar">
+          <v-col cols="12" md="4" lg="3">
             <v-select
-              v-model="scheduleEditor.type"
-              :items="editableScheduleTypeOptions"
+              v-model="selectedScheduleID"
+              label="Open Schedule"
+              :items="scheduleItems"
               item-title="label"
               item-value="value"
-              label="Schedule Type"
               variant="outlined"
               density="compact"
               hide-details
-              class="mb-3"
+              :menu-props="selectMenuProps"
+              @update:modelValue="onScheduleSelected"
             />
+          </v-col>
 
-            <div class="d-flex ga-2">
+          <v-col cols="12" md="4" lg="3">
+            <v-select
+              v-model="selectedPositionFilter"
+              label="Position"
+              :items="positionFilterItems"
+              item-title="label"
+              item-value="value"
+              variant="outlined"
+              density="compact"
+              hide-details
+              :menu-props="selectMenuProps"
+            />
+          </v-col>
+
+          <v-col cols="12" md="4" lg="6">
+            <div class="d-flex ga-2 flex-wrap justify-start justify-lg-end">
               <v-btn
-                size="default"
+                color="primary"
+                variant="flat"
+                prepend-icon="mdi-plus"
+                @click="openCreateScheduleDialog"
+              >
+                New
+              </v-btn>
+              <v-btn
+                v-if="selectedSchedule"
                 color="primary"
                 variant="tonal"
                 :disabled="selectedSchedule?.type === 'official'"
@@ -111,16 +66,7 @@
                 {{ selectedSchedule?.type === "official" ? "Active" : "Set as Active" }}
               </v-btn>
               <v-btn
-                size="default"
-                color="primary"
-                variant="flat"
-                :loading="isUpdatingSchedule"
-                @click="updateSelectedScheduleMeta"
-              >
-                Save
-              </v-btn>
-              <v-btn
-                size="default"
+                v-if="selectedSchedule"
                 color="error"
                 variant="tonal"
                 :loading="isDeletingSchedule"
@@ -129,262 +75,72 @@
                 Delete
               </v-btn>
             </div>
-          </div>
-          <div v-else class="text-body-2 text-medium-emphasis">
-            No schedule selected.
-          </div>
-        </v-card>
+          </v-col>
+        </v-row>
 
-        <v-card v-if="activePanel === 'templates'" class="mb-4 pa-4 bg-grey-lighten-3 browser-card" elevation="1">
-          <div class="d-flex align-center justify-space-between mb-3">
-            <div>
-              <div class="text-subtitle-1 font-weight-bold">Templates</div>
-              <div class="text-caption text-medium-emphasis">Reusable blueprints for recurring weeks.</div>
-            </div>
-            <v-chip size="small" variant="tonal" color="primary">{{ templateScheduleItems.length }}</v-chip>
-          </div>
-
-          <v-select
-            v-model="templateApply.templateScheduleID"
-            :items="templateScheduleItems"
-            item-title="label"
-            item-value="value"
-            label="Open Template"
-            variant="outlined"
-            density="compact"
-            hide-details
-            class="mb-3"
-            @update:modelValue="onTemplateSelected"
-          />
-
-          <v-sheet
-            v-if="templateApply.templateScheduleID && currentCalendarSchedule"
-            rounded="lg"
-            class="pa-3 mb-3 schedule-summary-sheet"
-            border
-          >
-            <div class="text-subtitle-2 font-weight-bold mb-1">
-              {{ currentCalendarSchedule.name || "Untitled Template" }}
-            </div>
-            <div class="text-caption text-medium-emphasis">
-              {{ currentCalendarSchedule.start_date }} to {{ currentCalendarSchedule.end_date }}
-            </div>
-          </v-sheet>
-
-          <v-text-field
-            v-model="templateApply.anchor_date"
-            label="Week Of"
-            type="date"
-            variant="outlined"
-            density="compact"
-            hide-details
-            class="mb-3"
-          />
-
-          <v-select
-            v-model="templateApply.type"
-            :items="editableScheduleTypeOptions"
-            item-title="label"
-            item-value="value"
-            label="Create As"
-            variant="outlined"
-            density="compact"
-            hide-details
-            class="mb-3"
-          />
-
-          <v-text-field
-            v-model="templateApply.name"
-            label="New Schedule Name (Optional)"
-            variant="outlined"
-            density="compact"
-            hide-details
-            class="mb-3"
-          />
-
+        <div class="d-flex align-center justify-start flex-wrap ga-2 mt-3">
           <v-btn
+            variant="text"
             color="primary"
-            block
-            :loading="isApplyingTemplate"
-            :disabled="!canApplyTemplate"
-            @click="createFromTemplate"
+            prepend-icon="mdi-calendar-plus"
+            :disabled="!selectedSchedule"
+            @click="openCreateShift"
           >
-            Create From Template
+            New Shift
           </v-btn>
-
           <v-btn
-            color="error"
-            variant="tonal"
-            block
-            class="mt-2"
-            :loading="isDeletingTemplate"
-            :disabled="!templateApply.templateScheduleID"
-            @click="deleteSelectedTemplate"
+            variant="text"
+            color="primary"
+            prepend-icon="mdi-content-copy"
+            :disabled="!selectedSchedule"
+            @click="openGenerateTemplateDialog"
           >
-            Delete Template
+            Generate Template
           </v-btn>
-        </v-card>
+          <v-btn
+            variant="text"
+            color="primary"
+            prepend-icon="mdi-repeat"
+            :disabled="!selectedSchedule || !shifts.length"
+            @click="openRepeatShiftsDialog"
+          >
+            Repeat Shifts
+          </v-btn>
+          <v-btn
+            variant="text"
+            color="primary"
+            prepend-icon="mdi-file-document-outline"
+            to="/manager/templates"
+          >
+            Manage Templates
+          </v-btn>
+        </div>
+      </div>
 
-        <v-card class="pa-4 bg-grey-lighten-3" elevation="1">
-          <div class="d-flex align-center justify-space-between mb-3">
-            <h3 class="text-subtitle-1 font-weight-bold">Health Check</h3>
-            <v-icon color="primary">mdi-radar</v-icon>
-          </div>
+      <div class="calendar-frame">
+        <Calendar
+          ref="managerCalendar"
+          :events="calendarEvents"
+          initialView="timeGridWeek"
+          :isEditable="false"
+          :isSelectable="true"
+          :height="760"
+          :contentHeight="700"
+          :firstDay="managerSettings.schedule_week_starts_monday ? 1 : 0"
+          :slotEventOverlap="false"
+          @dates-changed="saveSessionState"
+          @time-selected="openCreateShift"
+          @shift-clicked="openEditShiftModal"
+        />
+      </div>
+    </v-card>
 
-          <div class="d-flex align-center justify-space-between mb-2">
-            <div class="d-flex align-center">
-              <v-icon color="red-darken-2" size="small" class="mr-2">mdi-circle</v-icon>
-              <span class="text-body-2">Unassigned Shift</span>
-            </div>
-            <span class="font-weight-bold text-body-2">{{ unassignedShiftCount }}</span>
-          </div>
-
-          <div class="d-flex align-center justify-space-between">
-            <div class="d-flex align-center">
-              <v-icon color="blue-darken-1" size="small" class="mr-2">mdi-circle</v-icon>
-              <span class="text-body-2">Total Shifts</span>
-            </div>
-            <span class="font-weight-bold text-body-2">{{ shifts.length }}</span>
-          </div>
-        </v-card>
-      </v-col>
-
-      <v-col cols="12" md="9" lg="9">
-        <v-card elevation="2" class="pa-3 bg-white rounded-lg workspace-shell">
-          <div class="workspace-header mb-3">
-            <div class="d-flex align-center justify-space-between flex-wrap ga-3">
-              <div>
-                <div class="text-overline workspace-kicker">Schedule</div>
-                <div class="text-h5 font-weight-bold">{{ currentCalendarScheduleName }}</div>
-                <div v-if="currentCalendarSchedule" class="text-body-2 text-medium-emphasis">
-                  {{ currentCalendarSchedule.start_date }} to {{ currentCalendarSchedule.end_date }}
-                </div>
-              </div>
-
-              <div class="d-flex align-center flex-wrap justify-end ga-2">
-                <v-chip
-                  v-if="currentCalendarScheduleTypeLabel"
-                  color="blue"
-                  variant="tonal"
-                  size="small"
-                >
-                  {{ currentCalendarScheduleTypeLabel }}
-                </v-chip>
-                <v-chip size="small" variant="tonal" color="teal">
-                  {{ shifts.length }} shifts
-                </v-chip>
-                <v-chip size="small" variant="outlined" color="error">
-                  {{ unassignedShiftCount }} unassigned
-                </v-chip>
-              </div>
-            </div>
-
-            <div class="d-flex align-center justify-space-between flex-wrap ga-2 mt-3">
-              <div class="text-caption text-medium-emphasis">
-                Drag on the calendar to add shifts. Click an existing shift to edit staffing.
-              </div>
-
-              <div class="d-flex ga-2 flex-wrap">
-                <v-btn
-                  color="primary"
-                  variant="flat"
-                  prepend-icon="mdi-plus"
-                  @click="createScheduleDialog = true"
-                >
-                  New
-                </v-btn>
-                <v-btn
-                  v-if="activePanel === 'schedules' && selectedSchedule"
-                  color="primary"
-                  variant="tonal"
-                  :disabled="selectedSchedule?.type === 'official'"
-                  :loading="isUpdatingSchedule"
-                  @click="setSelectedScheduleActive"
-                >
-                  {{ selectedSchedule?.type === "official" ? "Active" : "Set as Active" }}
-                </v-btn>
-                <v-btn
-                  v-if="activePanel === 'schedules' && selectedSchedule"
-                  color="primary"
-                  variant="tonal"
-                  :loading="isUpdatingSchedule"
-                  @click="updateSelectedScheduleMeta"
-                >
-                  Save
-                </v-btn>
-                <v-btn
-                  v-if="activePanel === 'schedules' && selectedSchedule"
-                  color="error"
-                  variant="tonal"
-                  :loading="isDeletingSchedule"
-                  @click="deleteSelectedSchedule"
-                >
-                  Delete
-                </v-btn>
-                <v-btn
-                  v-if="activePanel === 'templates' && templateApply.templateScheduleID"
-                  color="primary"
-                  variant="tonal"
-                  :loading="isApplyingTemplate"
-                  :disabled="!canApplyTemplate"
-                  @click="createFromTemplate"
-                >
-                  Use Template
-                </v-btn>
-              </div>
-            </div>
-          </div>
-
-          <div class="calendar-frame">
-          <Calendar
-            ref="managerCalendar"
-            :events="calendarEvents"
-            initialView="timeGridWeek"
-            :isEditable="false"
-            :isSelectable="true"
-            :height="760"
-            :contentHeight="700"
-            :firstDay="managerSettings.schedule_week_starts_monday ? 1 : 0"
-            @dates-changed="saveSessionState"
-            @time-selected="openCreateShiftModal"
-            @shift-clicked="openEditShiftModal"
-          />
-          </div>
-        </v-card>
-      </v-col>
-    </v-row>
-
-    <v-dialog v-model="createScheduleDialog" max-width="640">
+    <v-dialog v-model="createScheduleDialog" max-width="640" eager>
       <v-card>
         <v-card-title class="text-h6">Create Schedule</v-card-title>
         <v-card-text>
           <v-row dense>
-            <v-col cols="12" sm="6">
-              <v-select
-                v-model="newSchedule.type"
-                label="Create Type"
-                :items="creatableScheduleTypeOptions"
-                item-title="label"
-                item-value="value"
-                variant="outlined"
-                density="comfortable"
-              />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-select
-                v-model="newSchedule.cadence"
-                label="Length"
-                :items="scheduleCadenceOptions"
-                item-title="label"
-                item-value="value"
-                variant="outlined"
-                density="comfortable"
-              />
-            </v-col>
-          </v-row>
-
-          <v-row dense>
-            <v-col cols="12" sm="6">
+            <v-col cols="12">
               <v-text-field
                 v-model="newSchedule.anchor_date"
                 label="Week Of"
@@ -393,20 +149,12 @@
                 density="comfortable"
               />
             </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field
-                v-model="newSchedule.name"
-                :label="newSchedule.type === 'template' ? 'Template Name' : 'Schedule Name (Optional)'"
-                variant="outlined"
-                density="comfortable"
-              />
-            </v-col>
           </v-row>
 
           <v-sheet rounded="lg" class="pa-3 generated-range-sheet" border>
-            <div class="text-caption generated-range-label">Generated Range</div>
+            <div class="text-caption generated-range-label">Date Range</div>
             <div class="text-body-1 font-weight-medium generated-range-value">
-              {{ computedScheduleRangeLabel || "Choose a week to generate the range." }}
+              {{ computedScheduleRangeLabel || "Choose a week to generate the schedule." }}
             </div>
           </v-sheet>
         </v-card-text>
@@ -419,7 +167,42 @@
             :disabled="!canCreateSchedule"
             @click="createSchedule"
           >
-            {{ newSchedule.type === "template" ? "Create Template" : "Create Schedule" }}
+            Create Schedule
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="repeatShiftsDialog.open" max-width="520" eager>
+      <v-card>
+        <v-card-title class="text-h6">Repeat Shifts</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model.number="repeatShiftsDialog.weeks"
+            label="Number of Future Weeks"
+            type="number"
+            min="1"
+            variant="outlined"
+            density="comfortable"
+          />
+
+          <div class="text-body-2 text-medium-emphasis">
+            Copies the first week of shifts into future weeks as separate shifts, so each copied week can still be edited on its own.
+          </div>
+          <div v-if="repeatScheduleEndLabel" class="text-body-2 text-medium-emphasis mt-2">
+            The current schedule will extend through {{ repeatScheduleEndLabel }}.
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="closeRepeatShiftsDialog">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            :loading="repeatShiftsDialog.saving"
+            :disabled="!canRepeatShifts"
+            @click="repeatShifts"
+          >
+            Repeat Shifts
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -446,22 +229,43 @@
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="shiftDialog.open" max-width="640">
+    <v-dialog v-model="generateTemplateDialog.open" max-width="560" eager>
+      <v-card>
+        <v-card-title class="text-h6">Generate Template From Schedule</v-card-title>
+        <v-card-text>
+
+
+          <v-text-field
+            v-model="generateTemplateDialog.name"
+            label="Template Name"
+            variant="outlined"
+            density="comfortable"
+          />
+
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="closeGenerateTemplateDialog">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            :loading="generateTemplateDialog.saving"
+            :disabled="!canGenerateTemplate"
+            @click="generateTemplateFromSchedule"
+          >
+            Generate Template
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="shiftDialog.open" max-width="640" eager>
       <v-card>
         <v-card-title class="text-h6">
           {{ shiftDialog.mode === "create" ? "Create Shift" : "Edit Shift" }}
         </v-card-title>
 
         <v-card-text>
-          <v-alert
-            v-if="!selectedScheduleID"
-            type="warning"
-            variant="tonal"
-            density="compact"
-            class="mb-3"
-          >
-            Select or create a schedule first.
-          </v-alert>
+
 
           <v-row dense>
             <v-col cols="12" sm="4">
@@ -503,6 +307,7 @@
                 label="Position"
                 variant="outlined"
                 density="comfortable"
+                :menu-props="selectMenuProps"
               />
             </v-col>
             <v-col cols="12" sm="6">
@@ -517,12 +322,45 @@
             </v-col>
           </v-row>
 
+
           <v-select
             v-model="shiftDialog.form.assignedWorkerIDs"
             :items="workerItems"
             item-title="label"
             item-value="value"
             label="Assign Workers"
+            variant="outlined"
+            density="comfortable"
+            multiple
+            chips
+            closable-chips
+            class="mt-1"
+            :menu-props="selectMenuProps"
+            :hint="shiftDialogAvailabilitySummary"
+            persistent-hint
+          >
+
+            <template #item="{ props, item }">
+              <v-list-item v-bind="props" :subtitle="item.raw.subtitle">
+                <template #append>
+                  <v-chip
+                    :color="item.raw.available ? 'success' : 'warning'"
+                    size="x-small"
+                    variant="tonal"
+                  >
+                    {{ item.raw.available ? "Available" : "Unavailable" }}
+                  </v-chip>
+                </template>
+              </v-list-item>
+            </template>
+          </v-select>
+
+          <v-select
+            v-model="shiftDialog.form.selectedTaskListIDs"
+            :items="tasklistItems"
+            item-title="label"
+            item-value="value"
+            label="Tasklists"
             variant="outlined"
             density="comfortable"
             multiple
@@ -571,12 +409,17 @@
 import Calendar from "../components/Calendar.vue";
 import scheduleServices from "../services/scheduleServices.js";
 import shiftServices from "../services/shiftServices.js";
+import shiftTaskListServices from "../services/shiftTaskListServices.js";
+import taskListServices from "../services/taskListServices.js";
 import userShiftServices from "../services/userShiftServices.js";
 import departmentUsersServices from "../services/departmentUsersServices.js";
 import userServices from "../services/userServices.js";
 import positionServices from "../services/positionServices.js";
 import settingsServices from "../services/settingsServices.js";
 import settingsValuesServices from "../services/settingsValuesServices.js";
+import { getPositionColor, UNASSIGNED_SHIFT_COLOR } from "../utils/positionColors.js";
+import unavailableServices from "../services/unavailableServices.js";
+import { emitNotificationRefresh } from "../services/notificationSync.js";
 
 const SESSION_STORAGE_KEY = "manager-schedule-page-state-v1";
 
@@ -599,16 +442,10 @@ export default {
 
       newSchedule: {
         anchor_date: "",
-        cadence: "weekly",
         type: "draft",
-        name: "",
       },
 
-      scheduleCadenceOptions: [
-        { label: "Weekly (1 week)", value: "weekly" },
-        { label: "Biweekly (2 weeks)", value: "biweekly" },
-      ],
-
+      
       scheduleTypeOptions: [
         { label: "Draft", value: "draft" },
         { label: "Template", value: "template" },
@@ -617,6 +454,7 @@ export default {
 
       schedules: [],
       selectedScheduleID: null,
+      selectedPositionFilter: "all",
       lastScheduleTabSelectionID: null,
       scheduleEditor: {
         name: "",
@@ -626,13 +464,15 @@ export default {
         templateScheduleID: null,
         anchor_date: "",
         type: "draft",
-        name: "",
       },
 
       shifts: [],
       userShiftAssignmentsByShiftID: {},
+      shiftTaskListsByShiftID: {},
       workersByID: {},
       positionsByID: {},
+      tasklists: [],
+      unavailabilityBlocks: [],
       managerSettings: {
         schedule_week_starts_monday: false,
         default_shift_workers_required: 1,
@@ -651,6 +491,7 @@ export default {
           workers_required: 1,
           positionID: null,
           assignedWorkerIDs: [],
+          selectedTaskListIDs: [],
         },
       },
       deleteConfirm: {
@@ -660,11 +501,28 @@ export default {
         message: "",
         loading: false,
       },
+      generateTemplateDialog: {
+        open: false,
+        saving: false,
+        name: "",
+      },
+      repeatShiftsDialog: {
+        open: false,
+        saving: false,
+        weeks: 1,
+      },
 
       snackbar: {
         show: false,
         message: "",
         color: "success",
+      },
+      selectMenuProps: {
+        attach: "body",
+        location: "bottom start",
+        locationStrategy: "connected",
+        origin: "auto",
+        maxHeight: 280,
       },
     };
   },
@@ -673,8 +531,7 @@ export default {
     computedScheduleRange() {
       if (!this.newSchedule.anchor_date) return null;
       const weekStart = this.getStartOfWeek(new Date(`${this.newSchedule.anchor_date}T00:00:00`));
-      const daySpan = this.newSchedule.cadence === "biweekly" ? 13 : 6;
-      const weekEnd = this.addDays(weekStart, daySpan);
+      const weekEnd = this.addDays(weekStart, 6);
 
       return {
         start_date: this.toISODate(weekStart),
@@ -684,7 +541,7 @@ export default {
 
     computedScheduleRangeLabel() {
       if (!this.computedScheduleRange) return "";
-      return `${this.computedScheduleRange.start_date} to ${this.computedScheduleRange.end_date}`;
+      return this.formatScheduleRange(this.computedScheduleRange);
     },
 
     creatableScheduleTypeOptions() {
@@ -700,15 +557,26 @@ export default {
     canCreateSchedule() {
       const hasCoreFields =
         !!this.managerDepartmentID &&
-        !!this.newSchedule.anchor_date &&
-        !!this.newSchedule.cadence &&
-        !!this.newSchedule.type;
+        !!this.newSchedule.anchor_date;
       if (!hasCoreFields) return false;
-      if (this.newSchedule.type === "template" && !String(this.newSchedule.name || "").trim()) {
-        return false;
-      }
 
       return !!this.computedScheduleRange;
+    },
+
+    canRepeatShifts() {
+      return (
+        !!this.selectedSchedule &&
+        this.shifts.length > 0 &&
+        Number(this.repeatShiftsDialog.weeks) >= 1
+      );
+    },
+
+    repeatScheduleEndLabel() {
+      if (!this.selectedSchedule || Number(this.repeatShiftsDialog.weeks) < 1) return "";
+      const scheduleStart = new Date(`${this.selectedSchedule.start_date}T00:00:00`);
+      const futureWeeks = Math.max(1, Number(this.repeatShiftsDialog.weeks) || 1);
+      const repeatedEnd = this.addDays(scheduleStart, ((futureWeeks + 1) * 7) - 1);
+      return this.formatDisplayDate(this.toISODate(repeatedEnd));
     },
 
     templateScheduleItems() {
@@ -725,6 +593,14 @@ export default {
         !!this.templateApply.templateScheduleID &&
         !!this.templateApply.anchor_date &&
         !!this.templateApply.type
+      );
+    },
+
+    canGenerateTemplate() {
+      return (
+        !!this.selectedSchedule &&
+        this.selectedSchedule.type !== "template" &&
+        !!String(this.generateTemplateDialog.name || "").trim()
       );
     },
 
@@ -757,13 +633,12 @@ export default {
         .filter((s) => s.type !== "template")
         .map((s) => ({
           value: s.ID,
-          label: `${s.name || "Untitled Schedule"} | ${s.type}`,
+          label: `${this.formatScheduleRange(s)} | ${this.formatScheduleType(s.type)}`,
         }));
     },
     firstScheduleID() {
       return this.scheduleItems[0]?.value || null;
     },
-
     currentCalendarSchedule() {
       return this.schedules.find((s) => Number(s.ID) === Number(this.selectedScheduleID)) || null;
     },
@@ -771,14 +646,7 @@ export default {
     currentCalendarScheduleName() {
       const schedule = this.currentCalendarSchedule;
       if (!schedule) return "No schedule selected";
-      return schedule.name || (schedule.type === "template" ? "Untitled Template" : "Untitled Schedule");
-    },
-
-    currentCalendarScheduleTypeLabel() {
-      const schedule = this.currentCalendarSchedule;
-      if (!schedule?.type) return "";
-      if (String(schedule.type).toLowerCase() === "official") return "Active";
-      return String(schedule.type).charAt(0).toUpperCase() + String(schedule.type).slice(1);
+      return this.formatScheduleRange(schedule);
     },
 
     positionItems() {
@@ -786,21 +654,141 @@ export default {
       return list.map((p) => ({ value: p.positionID || p.ID, label: p.title || `Position ${p.positionID || p.ID}` }));
     },
 
+    positionFilterItems() {
+      return [
+        { value: "all", label: "All Positions" },
+        ...this.positionItems,
+      ];
+    },
+
+    filteredShifts() {
+      if (this.selectedPositionFilter === "all") return this.shifts;
+      return this.shifts.filter(
+        (shift) => String(shift.positionID || "") === String(this.selectedPositionFilter)
+      );
+    },
+
     workerItems() {
+      const availabilityByWorkerID = this.shiftDialogAvailabilityByWorkerID;
       const list = Object.values(this.workersByID);
+
       return list
         .map((w) => {
           const id = Number(w.ID ?? w.userID ?? w.id);
           if (!Number.isFinite(id) || id <= 0) return null;
-          return { value: id, label: w.name || `Worker ${id}` };
+
+          const label = w.name || `Worker ${id}`;
+          const availability = availabilityByWorkerID[id] || {
+            available: true,
+            subtitle: "Set the shift date and time to check availability.",
+          };
+
+          return {
+            value: id,
+            label,
+            available: availability.available,
+            subtitle: availability.subtitle,
+          };
         })
-        .filter(Boolean);
+        .filter(Boolean)
+        .sort((a, b) => {
+          if (a.available !== b.available) return a.available ? -1 : 1;
+          return a.label.localeCompare(b.label);
+        });
+    },
+
+    shiftDialogWindow() {
+      const shiftDate = this.shiftDialog?.form?.shift_date;
+      const startTime = this.toHHMM(this.shiftDialog?.form?.start_time);
+      const endTime = this.toHHMM(this.shiftDialog?.form?.end_time);
+
+      if (!shiftDate || !startTime || !endTime) return null;
+
+      const start = new Date(`${shiftDate}T${startTime}:00`);
+      const end = new Date(`${shiftDate}T${endTime}:00`);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) {
+        return null;
+      }
+
+      return { start, end };
+    },
+
+    shiftDialogAvailabilityByWorkerID() {
+      const window = this.shiftDialogWindow;
+      const blocks = Array.isArray(this.unavailabilityBlocks) ? this.unavailabilityBlocks : [];
+
+      return Object.values(this.workersByID).reduce((map, worker) => {
+        const id = Number(worker.ID ?? worker.userID ?? worker.id);
+        if (!Number.isFinite(id) || id <= 0) return map;
+
+        if (!window) {
+          map[id] = {
+            available: true,
+            subtitle: "Set the shift date and time to check availability.",
+          };
+          return map;
+        }
+
+        const unavailable = blocks.some(
+          (block) => Number(block.userID) === id && this.doDateRangesOverlap(window.start, window.end, block.start, block.end)
+        );
+
+        map[id] = {
+          available: !unavailable,
+          subtitle: unavailable ? "Marked unavailable for this shift." : "Available for this shift.",
+        };
+        return map;
+      }, {});
+    },
+
+    availableWorkerItems() {
+      return this.workerItems.filter((item) => item.available);
+    },
+
+    unavailableWorkerItems() {
+      return this.workerItems.filter((item) => !item.available);
+    },
+
+    shiftDialogAvailabilitySummary() {
+      if (!this.shiftDialogWindow) {
+        return "Set the shift date and time to see worker availability.";
+      }
+
+      return `${this.availableWorkerItems.length} available, ${this.unavailableWorkerItems.length} unavailable`;
+    },
+
+    availableWorkerNamesText() {
+      if (!this.shiftDialogWindow) {
+        return "Set the shift date and time first.";
+      }
+
+      return this.availableWorkerItems.length
+        ? this.availableWorkerItems.map((item) => item.label).join(", ")
+        : "None";
+    },
+
+    unavailableWorkerNamesText() {
+      if (!this.shiftDialogWindow) {
+        return "Set the shift date and time first.";
+      }
+
+      return this.unavailableWorkerItems.length
+        ? this.unavailableWorkerItems.map((item) => item.label).join(", ")
+        : "None";
+    },
+
+    tasklistItems() {
+      return this.tasklists.map((tasklist) => ({
+        value: tasklist.ID,
+        label: tasklist.name || `Tasklist ${tasklist.ID}`,
+      }));
     },
 
     calendarEvents() {
-      return this.shifts.map((shift) => {
+      return this.filteredShifts.map((shift) => {
         const shiftID = shift.ID;
         const assignments = this.userShiftAssignmentsByShiftID[shiftID] || [];
+        const tasklistCount = (this.shiftTaskListsByShiftID[shiftID] || []).length;
         const workerNames = assignments
           .map((a) => {
             const userID = Number(a.userID);
@@ -816,24 +804,33 @@ export default {
           assignedCount > 0
             ? `${positionTitle} (${assignedCount}/${required}) - ${workerNames}`
             : `${positionTitle} (0/${required}) - Unassigned`;
+        const titleWithTasklists = tasklistCount
+          ? `${title} | ${tasklistCount} tasklist${tasklistCount === 1 ? "" : "s"}`
+          : title;
 
-        const color = assignedCount >= required ? "#2e7d32" : "#c62828";
+        const color =
+          assignedCount === 0
+            ? UNASSIGNED_SHIFT_COLOR
+            : getPositionColor(position, shift.positionID);
 
         return {
           id: String(shift.ID),
-          title,
+          title: titleWithTasklists,
           start: `${shift.shift_date}T${this.toHHMM(shift.start_time)}:00`,
           end: `${shift.shift_date}T${this.toHHMM(shift.end_time)}:00`,
           color,
+          borderColor: assignedCount >= required ? color : UNASSIGNED_SHIFT_COLOR,
+          textColor: "#ffffff",
           extendedProps: {
             shiftID: shift.ID,
+            positionID: shift.positionID || null,
           },
         };
       });
     },
 
     unassignedShiftCount() {
-      return this.shifts.filter((shift) => {
+      return this.filteredShifts.filter((shift) => {
         const assigned = (this.userShiftAssignmentsByShiftID[shift.ID] || []).length;
         return assigned < (shift.workers_required || 1);
       }).length;
@@ -872,6 +869,9 @@ export default {
       ) {
         this.lastScheduleTabSelectionID = this.selectedScheduleID;
       }
+      this.saveSessionState();
+    },
+    selectedPositionFilter() {
       this.saveSessionState();
     },
     "templateApply.templateScheduleID"() {
@@ -931,6 +931,41 @@ export default {
       return String(value).slice(0, 5);
     },
 
+    formatDisplayDate(dateValue) {
+      if (!dateValue) return "";
+      const date = new Date(`${dateValue}T00:00:00`);
+      if (Number.isNaN(date.getTime())) return String(dateValue);
+      return new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }).format(date);
+    },
+
+    formatScheduleRange(schedule) {
+      if (!schedule?.start_date || !schedule?.end_date) return "";
+      return `${this.formatDisplayDate(schedule.start_date)} to ${this.formatDisplayDate(schedule.end_date)}`;
+    },
+
+    formatScheduleType(type) {
+      const normalized = String(type || "").trim().toLowerCase();
+      if (normalized === "official") return "Active";
+      return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : "";
+    },
+    toHMS(value, fallback = "00:00:00") {
+      return String(value || fallback).slice(0, 8);
+    },
+
+    normalizeResponseArray(response, keys = []) {
+      if (Array.isArray(response)) return response;
+      for (const key of keys) {
+        if (Array.isArray(response?.[key])) return response[key];
+      }
+      if (Array.isArray(response?.data)) return response.data;
+      return [];
+    },
+
+
     jumpCalendarToDate(dateStr) {
       if (!dateStr) return;
       this.$nextTick(() => {
@@ -945,6 +980,55 @@ export default {
       return Number.isFinite(id) && id > 0 ? id : null;
     },
 
+    normalizeUnavailabilityBlock(rawBlock) {
+      const userID = this.normalizeUserID(rawBlock?.userID ?? rawBlock?.user?.userID ?? rawBlock?.user?.ID);
+      const startDate = rawBlock?.start_date;
+      const endDate = rawBlock?.end_date;
+      const startTime = this.toHMS(rawBlock?.start_time, "00:00:00");
+      const endTime = this.toHMS(rawBlock?.end_time, "23:59:59");
+
+      return {
+        id: rawBlock?.ID ?? rawBlock?.id,
+        userID,
+        start: new Date(`${startDate}T${startTime}`),
+        end: new Date(`${endDate}T${endTime}`),
+      };
+    },
+
+    async loadUnavailability() {
+      const workerIDs = new Set(
+        Object.keys(this.workersByID)
+          .map((key) => Number(key))
+          .filter((id) => Number.isFinite(id) && id > 0)
+      );
+
+      if (!workerIDs.size) {
+        this.unavailabilityBlocks = [];
+        return;
+      }
+
+      try {
+        const response = await unavailableServices.getAll({ limit: 1000 });
+        const rows = this.normalizeResponseArray(response, ["unavailabilities"]);
+        this.unavailabilityBlocks = rows
+          .map((row) => this.normalizeUnavailabilityBlock(row))
+          .filter((block) => block.id && workerIDs.has(Number(block.userID)));
+      } catch (error) {
+        console.error("Failed to load worker unavailability:", error);
+        this.unavailabilityBlocks = [];
+      }
+    },
+
+    doDateRangesOverlap(rangeStart, rangeEnd, blockStart, blockEnd) {
+      const start = rangeStart instanceof Date ? rangeStart.getTime() : new Date(rangeStart).getTime();
+      const end = rangeEnd instanceof Date ? rangeEnd.getTime() : new Date(rangeEnd).getTime();
+      const blockStartTime = blockStart instanceof Date ? blockStart.getTime() : new Date(blockStart).getTime();
+      const blockEndTime = blockEnd instanceof Date ? blockEnd.getTime() : new Date(blockEnd).getTime();
+
+      if ([start, end, blockStartTime, blockEndTime].some((value) => Number.isNaN(value))) return false;
+      return start < blockEndTime && blockStartTime < end;
+    },
+
     getCurrentUser() {
       const raw = localStorage.getItem("user");
       const stored = raw ? JSON.parse(raw) : null;
@@ -953,6 +1037,29 @@ export default {
 
     showMessage(message, color = "success") {
       this.snackbar = { show: true, message, color };
+    },
+
+    openCreateScheduleDialog() {
+      this.newSchedule.type = "draft";
+      this.createScheduleDialog = true;
+    },
+
+    openRepeatShiftsDialog() {
+
+
+      this.repeatShiftsDialog = {
+        open: true,
+        saving: false,
+        weeks: 1,
+      };
+    },
+
+    closeRepeatShiftsDialog() {
+      this.repeatShiftsDialog = {
+        open: false,
+        saving: false,
+        weeks: 1,
+      };
     },
 
     openDeleteConfirm(target) {
@@ -976,6 +1083,65 @@ export default {
         message: "",
         loading: false,
       };
+    },
+
+    openGenerateTemplateDialog() {
+      if (!this.selectedSchedule) return;
+      this.generateTemplateDialog = {
+        open: true,
+        saving: false,
+        name: `Template ${this.formatScheduleRange(this.selectedSchedule)}`,
+      };
+    },
+
+    closeGenerateTemplateDialog() {
+      this.generateTemplateDialog = {
+        open: false,
+        saving: false,
+        name: "",
+      };
+    },
+
+    async generateTemplateFromSchedule() {
+      if (!this.canGenerateTemplate) return;
+
+      try {
+        this.generateTemplateDialog.saving = true;
+        const sourceSchedule = this.selectedSchedule;
+        const sourceShifts = await shiftServices.getAll({ scheduleID: sourceSchedule.ID });
+        const shiftsToCopy = Array.isArray(sourceShifts) ? sourceShifts : [];
+
+        const createdTemplateRes = await scheduleServices.create({
+          name: String(this.generateTemplateDialog.name || "").trim(),
+          start_date: sourceSchedule.start_date,
+          end_date: sourceSchedule.end_date,
+          type: "template",
+          departmentID: this.managerDepartmentID,
+        });
+        const createdTemplate = createdTemplateRes?.data || createdTemplateRes;
+        const templateID = createdTemplate?.ID;
+        if (!templateID) throw new Error("Could not create template.");
+
+        for (const shift of shiftsToCopy) {
+          await shiftServices.create({
+            shift_date: shift.shift_date,
+            start_time: this.toHHMM(shift.start_time),
+            end_time: this.toHHMM(shift.end_time),
+            workers_required: shift.workers_required || 1,
+            scheduleID: templateID,
+            positionID: shift.positionID || null,
+          });
+        }
+
+        await this.loadSchedules();
+        this.closeGenerateTemplateDialog();
+
+      } catch (e) {
+        console.error(e);
+        this.showMessage(e?.response?.data?.message || e?.message || "Failed to generate template.", "error");
+      } finally {
+        this.generateTemplateDialog.saving = false;
+      }
     },
 
     async confirmDelete() {
@@ -1052,12 +1218,13 @@ export default {
 
       const conflictingShift = this.shifts.find((shift) => {
         if (editingShiftID && Number(shift.ID) === Number(editingShiftID)) return false;
+        if (String(shift.positionID || "") !== String(shiftPayload.positionID || "")) return false;
         return this.getShiftOverlapMinutes(shiftPayload, shift) > allowedMinutes;
       });
 
       if (!conflictingShift) return null;
 
-      return `This shift overlaps another shift by more than ${allowedMinutes} minute${allowedMinutes === 1 ? "" : "s"}.`;
+      return `This shift overlaps another shift in the same position`;
     },
 
     readSessionState() {
@@ -1073,10 +1240,12 @@ export default {
     saveSessionState() {
       try {
         sessionStorage.setItem(
+
           SESSION_STORAGE_KEY,
           JSON.stringify({
             activePanel: this.activePanel,
             selectedScheduleID: this.selectedScheduleID,
+            selectedPositionFilter: this.selectedPositionFilter,
             lastScheduleTabSelectionID: this.lastScheduleTabSelectionID,
             templateScheduleID: this.templateApply.templateScheduleID,
             calendarDate:
@@ -1107,11 +1276,10 @@ export default {
       const state = this.readSessionState();
       if (!state) return null;
 
-      this.activePanel =
-        state.activePanel === "templates" || state.activePanel === "schedules"
-          ? state.activePanel
-          : "schedules";
+
+      this.activePanel = "schedules";
       this.selectedScheduleID = state.selectedScheduleID || null;
+      this.selectedPositionFilter = state.selectedPositionFilter || "all";
       this.lastScheduleTabSelectionID = state.lastScheduleTabSelectionID || null;
       this.templateApply = {
         ...this.templateApply,
@@ -1144,19 +1312,16 @@ export default {
       if (!this.selectedScheduleID) return;
       try {
         this.isUpdatingSchedule = true;
-        const payload = {
-          name: String(this.scheduleEditor.name || "").trim() || null,
-          type: this.scheduleEditor.type,
-        };
+        const payload = { name: null };
         const res = await scheduleServices.update(this.selectedScheduleID, payload);
         const updated = res?.data || null;
         const keepSelectedID = this.selectedScheduleID;
         await this.loadSchedules();
+
         this.selectedScheduleID = keepSelectedID;
         await this.loadShiftsForSelectedSchedule();
         this.jumpCalendarToDate(updated?.start_date || this.selectedSchedule?.start_date);
         this.refreshScheduleEditorFromSelected();
-        this.showMessage("Schedule updated.");
       } catch (e) {
         console.error(e);
         this.showMessage(e?.response?.data?.message || "Failed to update schedule.", "error");
@@ -1177,10 +1342,13 @@ export default {
         await this.loadShiftsForSelectedSchedule();
         this.jumpCalendarToDate(updated?.start_date || this.selectedSchedule?.start_date);
         this.refreshScheduleEditorFromSelected();
-        this.showMessage("Schedule set as active.");
       } catch (e) {
         console.error(e);
-        this.showMessage(e?.response?.data?.message || "Failed to set schedule as active.", "error");
+        this.showMessage(
+          e?.response?.data?.message ||
+            "Failed to set schedule as active.",
+          "error"
+        );
       } finally {
         this.isUpdatingSchedule = false;
       }
@@ -1212,7 +1380,6 @@ export default {
           this.userShiftAssignmentsByShiftID = {};
         }
         this.refreshScheduleEditorFromSelected();
-        this.showMessage("Schedule deleted.");
       } catch (e) {
         console.error(e);
         this.showMessage(e?.response?.data?.message || "Failed to delete schedule.", "error");
@@ -1252,7 +1419,6 @@ export default {
           }
         }
 
-        this.showMessage("Template deleted.");
       } catch (e) {
         console.error(e);
         this.showMessage(e?.response?.data?.message || "Failed to delete template.", "error");
@@ -1278,9 +1444,7 @@ export default {
         const dayOffset = Math.round((targetStart - sourceStart) / (1000 * 60 * 60 * 24));
 
         const createdScheduleRes = await scheduleServices.create({
-          name:
-            String(this.templateApply.name || "").trim() ||
-            `${template.name || "Schedule"} ${this.toISODate(targetStart)}`,
+          name: null,
           start_date: this.toISODate(targetStart),
           end_date: this.toISODate(targetEnd),
           type: this.templateApply.type,
@@ -1293,7 +1457,7 @@ export default {
         for (const s of templateShifts) {
           const original = new Date(`${s.shift_date}T00:00:00`);
           const shifted = this.addDays(original, dayOffset);
-          await shiftServices.create({
+          const createdShift = await shiftServices.create({
             shift_date: this.toISODate(shifted),
             start_time: this.toHHMM(s.start_time),
             end_time: this.toHHMM(s.end_time),
@@ -1301,6 +1465,14 @@ export default {
             scheduleID: newScheduleID,
             positionID: s.positionID || null,
           });
+          const createdShiftID = createdShift?.ID ?? createdShift?.id ?? createdShift?.data?.ID;
+          if (createdShiftID) {
+            const sourceTasklists = await shiftTaskListServices.getAll({ shiftID: s.ID });
+            const selectedTaskListIDs = Array.isArray(sourceTasklists)
+              ? sourceTasklists.map((row) => row.task_listID)
+              : [];
+            await this.syncShiftTasklists(createdShiftID, selectedTaskListIDs);
+          }
         }
 
         await this.loadSchedules();
@@ -1311,7 +1483,6 @@ export default {
         await this.loadShiftsForSelectedSchedule();
         this.jumpCalendarToDate(createdSchedule?.start_date || this.toISODate(targetStart));
         this.refreshScheduleEditorFromSelected();
-        this.showMessage("Schedule created from template.");
       } catch (e) {
         console.error(e);
         this.showMessage(e?.response?.data?.message || e?.message || "Failed to create from template.", "error");
@@ -1349,12 +1520,19 @@ export default {
         }
 
         const restoredState = this.restoreSessionState();
-        await Promise.all([this.loadWorkers(), this.loadPositions(), this.loadManagerSettings(), this.loadSchedules()]);
+        await Promise.all([
+          this.loadWorkers(),
+          this.loadPositions(),
+          this.loadTasklists(),
+          this.loadManagerSettings(),
+          this.loadSchedules(),
+        ]);
+        await this.loadUnavailability();
 
         const routeScheduleID = Number(this.$route?.query?.scheduleID);
         const routeTemplateID = Number(this.$route?.query?.templateID);
         if (Number.isFinite(routeScheduleID) && routeScheduleID > 0) {
-          const exists = this.schedules.some((s) => Number(s.ID) === routeScheduleID);
+          const exists = this.schedules.some((s) => Number(s.ID) === routeScheduleID && s.type !== "template");
           if (exists) {
             this.activePanel = "schedules";
             this.selectedScheduleID = routeScheduleID;
@@ -1366,31 +1544,22 @@ export default {
           return;
         }
         if (Number.isFinite(routeTemplateID) && routeTemplateID > 0) {
-          const exists = this.schedules.some((s) => Number(s.ID) === routeTemplateID && s.type === "template");
-          if (exists) {
-            this.activePanel = "templates";
-            this.templateApply.templateScheduleID = routeTemplateID;
-            await this.onTemplateSelected();
-            this.saveSessionState();
-          }
+          this.$router.push({
+            path: "/manager/templates",
+            query: { templateID: String(routeTemplateID) },
+          });
           return;
         }
 
         if (
           restoredState?.selectedScheduleID &&
-          this.schedules.some((s) => Number(s.ID) === Number(restoredState.selectedScheduleID))
+          this.schedules.some(
+            (s) => Number(s.ID) === Number(restoredState.selectedScheduleID) && s.type !== "template"
+          )
         ) {
           this.selectedScheduleID = restoredState.selectedScheduleID;
-          if (this.activePanel === "templates") {
-            this.templateApply.templateScheduleID =
-              restoredState.templateScheduleID || this.templateApply.templateScheduleID;
-            if (this.templateApply.templateScheduleID) {
-              await this.onTemplateSelected();
-            }
-          } else {
-            this.activePanel = "schedules";
-            await this.onScheduleSelected();
-          }
+          this.activePanel = "schedules";
+          await this.onScheduleSelected();
           this.jumpCalendarToDate(restoredState.calendarDate || this.currentCalendarSchedule?.start_date);
           this.saveSessionState();
           return;
@@ -1407,6 +1576,37 @@ export default {
         console.error(e);
         this.showMessage("Failed to load manager scheduling data.", "error");
       }
+    },
+
+    async syncShiftTasklists(shiftID, selectedTaskListIDs = []) {
+      const currentRows = await shiftTaskListServices.getAll({ shiftID });
+      const existingRows = Array.isArray(currentRows) ? currentRows : [];
+      const existingIDs = new Set(existingRows.map((row) => String(row.task_listID)));
+      const nextIDs = new Set(
+        selectedTaskListIDs
+          .map((id) => Number(id))
+          .filter((id) => Number.isFinite(id) && id > 0)
+          .map((id) => String(id))
+      );
+
+      const tasklistIDsToAdd = [...nextIDs].filter((id) => !existingIDs.has(id));
+      const tasklistRowsToRemove = existingRows.filter(
+        (row) => !nextIDs.has(String(row.task_listID))
+      );
+
+      await Promise.all([
+        ...tasklistIDsToAdd.map((taskListID) =>
+          shiftTaskListServices.create({
+            shiftID,
+            task_listID: Number(taskListID),
+          })
+        ),
+        ...tasklistRowsToRemove.map((row) =>
+          row.ID
+            ? shiftTaskListServices.delete(row.ID)
+            : shiftTaskListServices.deleteByPair(shiftID, row.task_listID)
+        ),
+      ]);
     },
 
     async loadWorkers() {
@@ -1447,6 +1647,18 @@ export default {
         if (id) acc[id] = p;
         return acc;
       }, {});
+
+      if (
+        this.selectedPositionFilter !== "all" &&
+        !this.positionsByID[this.selectedPositionFilter]
+      ) {
+        this.selectedPositionFilter = "all";
+      }
+    },
+
+    async loadTasklists() {
+      const res = await taskListServices.getAll({ departmentID: this.managerDepartmentID });
+      this.tasklists = Array.isArray(res) ? res : [];
     },
 
     async loadSchedules() {
@@ -1472,10 +1684,10 @@ export default {
         this.selectedScheduleID = null;
       }
 
-      if (!this.selectedScheduleID && this.schedules.length > 0) {
-        this.selectedScheduleID = this.getPreferredDefaultScheduleID() || this.schedules[0].ID;
+      if (!this.selectedScheduleID && scheduleIDs.size > 0) {
+        this.selectedScheduleID = this.getPreferredDefaultScheduleID();
         await this.loadShiftsForSelectedSchedule();
-        const first = this.schedules.find((s) => Number(s.ID) === Number(this.selectedScheduleID)) || this.schedules[0];
+        const first = this.schedules.find((s) => Number(s.ID) === Number(this.selectedScheduleID));
         this.jumpCalendarToDate(first?.start_date);
         this.refreshScheduleEditorFromSelected();
       }
@@ -1487,18 +1699,12 @@ export default {
       try {
         this.isCreatingSchedule = true;
         const range = this.computedScheduleRange;
-        if (!range) {
-          this.showMessage("Please choose a valid week and length.", "warning");
-          return;
-        }
 
         const payload = {
-          name:
-            String(this.newSchedule.name || "").trim() ||
-            (this.newSchedule.type === "template" ? `Template ${range.start_date}` : `Schedule ${range.start_date}`),
+          name: null,
           start_date: range.start_date,
           end_date: range.end_date,
-          type: this.newSchedule.type,
+          type: "draft",
           departmentID: this.managerDepartmentID,
         };
 
@@ -1507,25 +1713,119 @@ export default {
 
         this.schedules = [createdSchedule, ...this.schedules];
         this.selectedScheduleID = createdSchedule?.ID ?? this.selectedScheduleID;
-        if (this.newSchedule.type !== "template") {
-          this.lastScheduleTabSelectionID = createdSchedule?.ID ?? this.lastScheduleTabSelectionID;
-        }
-        this.activePanel = this.newSchedule.type === "template" ? "templates" : "schedules";
-        if (this.newSchedule.type === "template") {
-          this.templateApply.templateScheduleID = createdSchedule?.ID ?? this.templateApply.templateScheduleID;
-        }
+        this.lastScheduleTabSelectionID = createdSchedule?.ID ?? this.lastScheduleTabSelectionID;
+        this.activePanel = "schedules";
         this.createScheduleDialog = false;
         await this.loadShiftsForSelectedSchedule();
         this.jumpCalendarToDate(createdSchedule?.start_date || range.start_date);
         this.refreshScheduleEditorFromSelected();
 
-        this.showMessage(`Schedule created as ${this.newSchedule.type} (${this.newSchedule.cadence}).`);
         this.saveSessionState();
       } catch (e) {
         console.error(e);
         this.showMessage("Failed to create schedule.", "error");
       } finally {
         this.isCreatingSchedule = false;
+      }
+    },
+
+    async repeatShifts() {
+      if (!this.canRepeatShifts) return;
+
+      try {
+        this.repeatShiftsDialog.saving = true;
+        const schedule = this.selectedSchedule;
+        const futureWeeks = Math.max(1, Number(this.repeatShiftsDialog.weeks) || 1);
+        const scheduleStart = new Date(`${schedule.start_date}T00:00:00`);
+        const firstWeekEnd = this.addDays(scheduleStart, 6);
+        const sourceShifts = this.shifts.filter((shift) => {
+          const shiftDate = new Date(`${shift.shift_date}T00:00:00`);
+          return shiftDate >= scheduleStart && shiftDate <= firstWeekEnd;
+        });
+
+
+
+        const existingKeys = new Set(
+          this.shifts.map((shift) =>
+            [
+              shift.shift_date,
+              this.toHHMM(shift.start_time),
+              this.toHHMM(shift.end_time),
+              shift.positionID || "",
+            ].join("|")
+          )
+        );
+
+        let createdCount = 0;
+        let assignmentCount = 0;
+        let scheduleExtendedTo = "";
+        for (let week = 1; week <= futureWeeks; week += 1) {
+          for (const shift of sourceShifts) {
+            const shiftedDate = this.addDays(new Date(`${shift.shift_date}T00:00:00`), week * 7);
+            const shiftDate = this.toISODate(shiftedDate);
+            const key = [
+              shiftDate,
+              this.toHHMM(shift.start_time),
+              this.toHHMM(shift.end_time),
+              shift.positionID || "",
+            ].join("|");
+
+            if (existingKeys.has(key)) continue;
+            existingKeys.add(key);
+
+            const createdShiftResponse = await shiftServices.create({
+              shift_date: shiftDate,
+              start_time: this.toHHMM(shift.start_time),
+              end_time: this.toHHMM(shift.end_time),
+              workers_required: shift.workers_required || 1,
+              scheduleID: schedule.ID,
+              positionID: shift.positionID || null,
+            });
+            const createdShift = createdShiftResponse?.data || createdShiftResponse;
+            const createdShiftID = createdShift?.ID ?? createdShift?.id ?? null;
+
+            if (createdShiftID) {
+              const assignments = this.userShiftAssignmentsByShiftID[shift.ID] || [];
+              for (const assignment of assignments) {
+                await userShiftServices.create({
+                  shiftID: createdShiftID,
+                  userID: assignment.userID,
+                  status: assignment.status || "assigned",
+                });
+                assignmentCount += 1;
+              }
+            }
+
+            createdCount += 1;
+          }
+        }
+
+        const currentEnd = new Date(`${schedule.end_date}T00:00:00`);
+        const repeatedEnd = this.addDays(scheduleStart, ((futureWeeks + 1) * 7) - 1);
+        if (repeatedEnd > currentEnd) {
+          scheduleExtendedTo = this.toISODate(repeatedEnd);
+          const updated = await scheduleServices.update(schedule.ID, {
+            end_date: scheduleExtendedTo,
+          });
+          const updatedSchedule = updated?.data || updated || {};
+          this.schedules = this.schedules.map((item) =>
+            Number(item.ID) === Number(schedule.ID)
+              ? { ...item, ...updatedSchedule, end_date: scheduleExtendedTo }
+              : item
+          );
+        }
+
+        await this.loadShiftsForSelectedSchedule();
+        this.closeRepeatShiftsDialog();
+        this.refreshScheduleEditorFromSelected();
+        
+
+        this.saveSessionState();
+      } catch (error) {
+        console.error("Failed to repeat shifts:", error?.response?.data || error);
+        this.showMessage(error?.response?.data?.message || "Failed to repeat shifts.", "error");
+      } finally {
+        this.repeatShiftsDialog.saving = false;
       }
     },
 
@@ -1560,13 +1860,17 @@ export default {
       if (!this.selectedScheduleID) {
         this.shifts = [];
         this.userShiftAssignmentsByShiftID = {};
+        this.shiftTaskListsByShiftID = {};
         return;
       }
 
       const shifts = await shiftServices.getAll({ scheduleID: this.selectedScheduleID });
       this.shifts = Array.isArray(shifts) ? shifts : [];
 
-      await Promise.all(this.shifts.map((shift) => this.loadAssignmentsForShift(shift.ID)));
+      await Promise.all([
+        ...this.shifts.map((shift) => this.loadAssignmentsForShift(shift.ID)),
+        ...this.shifts.map((shift) => this.loadTasklistsForShift(shift.ID)),
+      ]);
       this.$nextTick(() => this.$refs.managerCalendar?.updateSize());
     },
 
@@ -1576,10 +1880,6 @@ export default {
         rows = await userShiftServices.getAll({ shiftID });
       } catch (e) {
         console.error("Failed to load shift assignments:", e);
-        this.showMessage(
-          e?.response?.data?.message || "Could not load shift assignments.",
-          "warning"
-        );
       }
       this.userShiftAssignmentsByShiftID = {
         ...this.userShiftAssignmentsByShiftID,
@@ -1587,35 +1887,71 @@ export default {
       };
     },
 
-    openCreateShiftModal(selection) {
+    async loadTasklistsForShift(shiftID) {
+      let rows = [];
+      try {
+        rows = await shiftTaskListServices.getAll({ shiftID });
+      } catch (e) {
+        console.error("Failed to load shift tasklists:", e);
+      }
+      this.shiftTaskListsByShiftID = {
+        ...this.shiftTaskListsByShiftID,
+        [shiftID]: Array.isArray(rows) ? rows : [],
+      };
+    },
+
+    async openCreateShift(selection = null) {
       if (!this.selectedScheduleID) {
         this.showMessage("Create or select a schedule first.", "warning");
         return;
       }
 
-      const start = new Date(selection.start);
-      const end = new Date(selection.end);
+      let start;
+      let end;
+
+      if (selection?.start && selection?.end) {
+        start = new Date(selection.start);
+        end = new Date(selection.end);
+      } else {
+        const selectedDate =
+          this.$refs.managerCalendar?.getCurrentDate?.() ||
+          this.currentCalendarSchedule?.start_date ||
+          this.toISODate(new Date());
+
+        start = new Date(`${selectedDate}T09:00:00`);
+        end = new Date(`${selectedDate}T10:00:00`);
+      }
 
       this.shiftDialog.mode = "create";
       this.shiftDialog.shiftID = null;
       this.shiftDialog.form = {
-        shift_date: start.toISOString().slice(0, 10),
+        shift_date: this.toISODate(start),
         start_time: start.toTimeString().slice(0, 5),
         end_time: end.toTimeString().slice(0, 5),
         workers_required: Number(this.managerSettings.default_shift_workers_required) || 1,
-        positionID: this.positionItems[0]?.value ?? null,
+        positionID: null,
         assignedWorkerIDs: [],
+        selectedTaskListIDs: [],
       };
+
+      await this.loadUnavailability();
       this.shiftDialog.open = true;
     },
+
+
 
     async openEditShiftModal(event) {
       const shiftID = Number(event?.id ?? event?._def?.publicId ?? event?.extendedProps?.shiftID);
       const shift = this.shifts.find((s) => Number(s.ID) === shiftID);
       if (!shift) return;
 
-      await this.loadAssignmentsForShift(shiftID);
+      await Promise.all([
+        this.loadAssignmentsForShift(shiftID),
+        this.loadTasklistsForShift(shiftID),
+        this.loadUnavailability(),
+      ]);
       const assignments = this.userShiftAssignmentsByShiftID[shiftID] || [];
+      const tasklistLinks = this.shiftTaskListsByShiftID[shiftID] || [];
 
       this.shiftDialog.mode = "edit";
       this.shiftDialog.shiftID = shiftID;
@@ -1626,6 +1962,7 @@ export default {
         workers_required: shift.workers_required || 1,
         positionID: shift.positionID,
         assignedWorkerIDs: assignments.map((a) => a.userID),
+        selectedTaskListIDs: tasklistLinks.map((link) => link.task_listID),
       };
       this.shiftDialog.open = true;
     },
@@ -1665,7 +2002,8 @@ export default {
             createdShift?.data?.ID ??
             createdShift?.data?.id ??
             null;
-          // New shifts move non-template schedules back to draft while planning.
+
+            
           try {
             if (this.selectedSchedule?.type !== "template") {
               await scheduleServices.update(this.selectedScheduleID, { type: "draft" });
@@ -1682,11 +2020,14 @@ export default {
         }
 
         if (!shiftID) {
-          this.showMessage("Shift saved but shift ID was not returned.", "warning");
+
           await this.loadShiftsForSelectedSchedule();
           this.closeShiftDialog();
+          emitNotificationRefresh();
           return;
         }
+
+        await this.syncShiftTasklists(shiftID, form.selectedTaskListIDs);
 
         const existing = await userShiftServices.getAll({ shiftID });
         const existingRows = Array.isArray(existing) ? existing : [];
@@ -1741,6 +2082,7 @@ export default {
 
         await this.loadShiftsForSelectedSchedule();
         this.closeShiftDialog();
+        emitNotificationRefresh();
         if (assignmentErrors.length > 0) {
           this.showMessage(`Shift saved, but assignments failed: ${assignmentErrors[0]}`, "warning");
         } else {
@@ -1767,6 +2109,7 @@ export default {
         await shiftServices.delete(this.shiftDialog.shiftID);
         await this.loadShiftsForSelectedSchedule();
         this.closeShiftDialog();
+        emitNotificationRefresh();
         this.showMessage("Shift deleted.");
       } catch (e) {
         console.error(e);
@@ -1832,3 +2175,4 @@ export default {
   color: rgb(var(--v-theme-on-surface));
 }
 </style>
+

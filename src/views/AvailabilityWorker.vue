@@ -258,7 +258,7 @@ export default {
   },
   mounted() {
     if (this.getCurrentUserID()) {
-      this.fetchSavedBlocks();
+      this.initializeAvailability();
     }
   },
   methods: {
@@ -322,6 +322,7 @@ export default {
     },
 
     normalizeBlock(rawBlock) {
+      const reason = String(rawBlock.reason || rawBlock.title || "").trim();
       const start =
         rawBlock.start ||
         rawBlock.startDateTime ||
@@ -339,11 +340,11 @@ export default {
           rawBlock.unavailableID ||
           rawBlock.ID ||
           rawBlock.id,
-        title: "Unavailable",
+        title: reason.startsWith("Student Schedule:") ? reason.replace(/^Student Schedule:\s*/, "") : "Unavailable",
         start,
         end,
-        reason: rawBlock.reason || rawBlock.title || "",
-        color: rawBlock.reason === "Google Sync" ? "#1D4E89" : "#F44336",
+        reason,
+        color: reason === "Google Sync" ? "#1D4E89" : reason.startsWith("Student Schedule") ? "#2E7D32" : "#F44336",
         display: "block"
       };
     },
@@ -371,6 +372,37 @@ export default {
       const currentUser = this.getCurrentUser();
       const userID = Number(currentUser?.userID ?? currentUser?.ID ?? currentUser?.id);
       return Number.isFinite(userID) && userID > 0 ? userID : null;
+    },
+    hasStudentScheduleConfigured() {
+      const currentUser = this.getCurrentUser();
+      return Boolean(currentUser?.studentScheduleConfigured);
+    },
+    updateStoredUserFlags(updates = {}) {
+      const stored = Utils.getStore("user");
+      if (!stored) return;
+      Utils.setStore("user", { ...stored, ...updates });
+      this.user = Utils.getStore("user");
+    },
+    async initializeAvailability() {
+      await this.syncStudentScheduleIfConfigured();
+      await this.fetchSavedBlocks();
+    },
+    async syncStudentScheduleIfConfigured() {
+      const userID = this.getCurrentUserID();
+      if (!userID || !this.hasStudentScheduleConfigured()) return;
+
+      try {
+        await calendarServices.syncStudentSchedule({ userID });
+      } catch (error) {
+        if (error?.response?.status === 400) {
+          this.updateStoredUserFlags({
+            studentScheduleConfigured: false,
+            needsStudentIdSetup: false,
+          });
+          return;
+        }
+        console.error("Failed to sync student schedule:", error?.response?.data || error);
+      }
     },
     openCalendarDialog() {
       this.calendarDialog = true;
@@ -735,6 +767,8 @@ export default {
 :deep(.fc-header-toolbar) {
 }
 </style>
+
+
 
 
 

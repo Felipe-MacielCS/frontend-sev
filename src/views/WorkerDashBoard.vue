@@ -1,59 +1,50 @@
 <template>
   <v-container fluid class="pa-6 bg-grey-lighten-4" style="min-height: 100vh;">
-    <v-row>
-      <v-col cols="12" md="3">
-        <v-card class="mb-4 pa-4 bg-grey-lighten-3" elevation="1">
-          <h3 class="text-subtitle-1 font-weight-bold mb-3">Official Schedule</h3>
-          <div v-if="officialSchedule" class="text-body-2">
-            <div><b>Name:</b> {{ officialSchedule.name || "Official Schedule" }}</div>
-            <div><b>Range:</b> {{ officialSchedule.start_date }} to {{ officialSchedule.end_date }}</div>
-          </div>
-          <div v-else class="text-body-2 text-medium-emphasis">
-            No official schedule is available for your department.
-          </div>
-        </v-card>
-
-        <v-card class="mb-4 pa-4 bg-grey-lighten-3" elevation="1">
-          <h3 class="text-subtitle-1 font-weight-bold mb-3">View Filter</h3>
-          <v-select
-            v-model="selectedViewFilter"
-            :items="workerFilterItems"
-            item-title="label"
-            item-value="value"
-            label="Show"
-            variant="solo"
-            density="compact"
-            hide-details
-          />
-        </v-card>
-
-        <v-card class="pa-4 bg-grey-lighten-3" elevation="1">
-          <h3 class="text-subtitle-1 font-weight-bold mb-3">Alerts</h3>
-
-          <div class="d-flex align-center justify-space-between mb-2">
-            <div class="d-flex align-center">
-              <v-icon color="blue-darken-1" size="small" class="mr-2">mdi-circle</v-icon>
-              <span class="text-body-2">{{ filterSummaryLabel }}</span>
+    <v-card elevation="2" class="pa-4 bg-white rounded-lg workspace-shell">
+      <div class="workspace-header mb-4">
+        <div class="d-flex align-center justify-space-between flex-wrap ga-3 mb-4">
+          <div>
+            <div class="text-overline workspace-kicker">Worker Schedule</div>
+            <div v-if="officialSchedule" class="text-h5 font-weight-bold">
+              {{ currentCalendarTitle }}
             </div>
-            <span class="font-weight-bold text-body-2">{{ teamShifts.length }}</span>
-          </div>
-        </v-card>
-      </v-col>
 
-      <v-col cols="12" md="9">
-        <v-card elevation="2" class="pa-2 bg-white rounded-lg">
-          <Calendar
-            ref="workerCalendar"
-            :events="teamShifts"
-            initialView="timeGridWeek"
-            :isEditable="false"
-            :isSelectable="false"
-            :height="760"
-            :contentHeight="700"
-          />
-        </v-card>
-      </v-col>
-    </v-row>
+          </div>
+        </div>
+
+        <v-row dense class="align-end schedule-toolbar">
+          <v-col cols="12" md="6" lg="3">
+            <div>
+              <v-select
+                v-model="selectedViewFilter"
+                :items="workerFilterItems"
+                item-title="label"
+                item-value="value"
+                label="Show"
+                variant="outlined"
+                density="compact"
+                hide-details
+                :menu-props="{ maxHeight: 280 }"
+              />
+            </div>
+          </v-col>
+
+        </v-row>
+      </div>
+
+      <div class="calendar-frame">
+        <Calendar
+          ref="workerCalendar"
+          :events="teamShifts"
+          initialView="timeGridWeek"
+          :isEditable="false"
+          :isSelectable="false"
+          :height="760"
+          :contentHeight="700"
+          :slotEventOverlap="false"
+        />
+      </div>
+    </v-card>
   </v-container>
 </template>
 
@@ -64,6 +55,8 @@ import shiftServices from "../services/shiftServices.js";
 import userShiftServices from "../services/userShiftServices.js";
 import departmentUsersServices from "../services/departmentUsersServices.js";
 import userServices from "../services/userServices.js";
+import positionServices from "../services/positionServices.js";
+import { getPositionColor } from "../utils/positionColors.js";
 
 export default {
   name: "WorkerDashBoard",
@@ -74,6 +67,7 @@ export default {
       currentUserID: null,
       officialSchedule: null,
       departmentWorkersByID: {},
+      positionsByID: {},
       officialShifts: [],
       officialAssignmentsByShiftID: {},
       selectedViewFilter: "me",
@@ -96,12 +90,9 @@ export default {
 
       return [...items, ...coworkerItems];
     },
-    filterSummaryLabel() {
-      if (this.selectedViewFilter === "me") return "My Assigned Shifts";
-      if (this.selectedViewFilter === "all") return "All Coworker Shifts";
-
-      const selectedWorker = this.departmentWorkersByID[Number(this.selectedViewFilter)];
-      return selectedWorker?.name ? `${selectedWorker.name}'s Shifts` : "Assigned Shifts";
+    currentCalendarTitle() {
+      if (!this.officialSchedule) return "No official schedule selected";
+      return `${this.officialSchedule.start_date} to ${this.officialSchedule.end_date}`;
     },
     teamShifts() {
       const selectedWorkerID =
@@ -112,28 +103,35 @@ export default {
             : Number(this.selectedViewFilter);
 
       return this.officialShifts.flatMap((shift) => {
-        const assignments = this.officialAssignmentsByShiftID[shift.ID] || [];
-        const relevantAssignments =
-          selectedWorkerID === null
-            ? assignments
-            : assignments.filter((assignment) => Number(assignment.userID) === selectedWorkerID);
+          const assignments = this.officialAssignmentsByShiftID[shift.ID] || [];
+          const relevantAssignments =
+            selectedWorkerID === null
+              ? assignments
+              : assignments.filter((assignment) => Number(assignment.userID) === selectedWorkerID);
 
-        return relevantAssignments.map((assignment) => {
-          const worker = this.departmentWorkersByID[Number(assignment.userID)];
-          return {
-            id: `${shift.ID}-${assignment.ID}`,
-            title:
-              this.selectedViewFilter === "all"
-                ? `${worker?.name || "Worker"}`
-                : this.selectedViewFilter === "me"
-                  ? "My Shift"
-                  : `${worker?.name || "Worker"}'s Shift`,
-            start: `${shift.shift_date}T${this.toHHMM(shift.start_time)}:00`,
-            end: `${shift.shift_date}T${this.toHHMM(shift.end_time)}:00`,
-            color: Number(assignment.userID) === Number(this.currentUserID) ? "#2e7d32" : "#1565c0",
-          };
+          return relevantAssignments.map((assignment) => {
+            const worker = this.departmentWorkersByID[Number(assignment.userID)];
+            const position = this.positionsByID[shift.positionID];
+            const positionTitle = position?.title || "Shift";
+            return {
+              id: `${shift.ID}-${assignment.ID}`,
+              title:
+                this.selectedViewFilter === "all"
+                  ? `${worker?.name || "Worker"} - ${positionTitle}`
+                  : this.selectedViewFilter === "me"
+                    ? positionTitle
+                    : `${worker?.name || "Worker"} - ${positionTitle}`,
+              start: `${shift.shift_date}T${this.toHHMM(shift.start_time)}:00`,
+              end: `${shift.shift_date}T${this.toHHMM(shift.end_time)}:00`,
+              color: getPositionColor(position, shift.positionID),
+              textColor: "#ffffff",
+              extendedProps: {
+                shiftID: shift.ID,
+                positionID: shift.positionID || null,
+              },
+            };
+          });
         });
-      });
     },
   },
   async mounted() {
@@ -206,6 +204,20 @@ export default {
           return acc;
         }, {});
 
+        const positionsRes = await positionServices.getAll({ departmentID, limit: 200 });
+        const positions = Array.isArray(positionsRes)
+          ? positionsRes
+          : Array.isArray(positionsRes?.positions)
+            ? positionsRes.positions
+            : Array.isArray(positionsRes?.data)
+              ? positionsRes.data
+              : [];
+        this.positionsByID = positions.reduce((acc, position) => {
+          const id = position.positionID ?? position.ID ?? position.id;
+          if (id) acc[id] = position;
+          return acc;
+        }, {});
+
         const scheduleRes = await scheduleServices.getAll({
           departmentID,
           type: "official",
@@ -240,6 +252,7 @@ export default {
         console.error("Failed to load official schedule for worker:", e?.response?.data || e);
         this.officialSchedule = null;
         this.departmentWorkersByID = {};
+        this.positionsByID = {};
         this.officialShifts = [];
         this.officialAssignmentsByShiftID = {};
       }
@@ -247,3 +260,23 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.workspace-kicker {
+  letter-spacing: 0.12em;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+}
+
+.workspace-shell {
+  border-radius: 24px;
+}
+
+.workspace-header {
+  padding: 8px 8px 16px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.calendar-frame {
+  padding: 4px;
+}
+</style>

@@ -1,11 +1,11 @@
 import { createRouter, createWebHistory } from "vue-router";
 
 import Login from "./views/Login.vue";
-import Signup from "./views/Signup.vue";
 
 import WorkerDashboard from "./views/WorkerDashBoard.vue";
 import WorkerClockInOut from "./views/WorkerClockInOut.vue";
 import WorkerSettings from "./views/WorkerSettings.vue";
+
 import ManagerDashboard from "./views/ManagerDashBoard.vue";
 import ManagerSettings from "./views/ManagerSettings.vue";
 import ManagerTemplates from "./views/ManagerTemplates.vue";
@@ -13,9 +13,14 @@ import AvailabilityWorker from "./views/AvailabilityWorker.vue";
 import ManagerAvailability from "./views/ManagerAvailability.vue";
 import ManagerUsers from "./views/ManagerUsers.vue";
 import ManagerTradeBoard from "./views/ManagerTradeBoard.vue";
+import ManagerTasklists from "./views/ManagerTasklists.vue";
+import ManagerClockin from "./views/ManagerClockin.vue";
+
 import WorkerTradeBoard from "./views/WorkerTradeBoard.vue";
+import WorkerAnnouncements from "./views/WorkerAnnouncements.vue";
 import Budget from "./views/Budget.vue";
-// import AdminDashboard from "./views/AdminDashBoard.vue";
+import ManagerAnnouncements from "./views/ManagerAnnouncements.vue";
+import AdminDashboard from "./views/AdminDashBoard.vue";
 
 // import WorkerProfile from "./views/WorkerProfile.vue";
 
@@ -31,14 +36,27 @@ const router = createRouter({
     {
       path: "/signup",
       name: "signup",
-      component: Signup,
+      redirect: "/login",
     },
 
     // Manager Routes
     {
+      path: "/admin",
+      name: "adminDashboard",
+      component: AdminDashboard,
+      meta: { role: "Admin" },
+    },
+
+    {
       path: "/manager",
       name: "managerDashboard",
       component: ManagerDashboard,
+      meta: { role: "Manager" },
+    },
+    {
+      path: "/manager/tasklists",
+      name: "managerTasklists",
+      component: ManagerTasklists,
       meta: { role: "Manager" },
     },
     {
@@ -71,6 +89,12 @@ const router = createRouter({
       component: ManagerTradeBoard,
       meta: { role: "Manager" },
     },
+    {
+      path: "/manager/announcements",
+      name: "managerAnnouncements",
+      component: ManagerAnnouncements,
+      meta: { role: "Manager" },
+    },
 
     // Worker Routes
     {
@@ -92,6 +116,12 @@ const router = createRouter({
       meta: { role: "Worker" },
     },
     {
+      path: "/worker/announcements",
+      name: "workerAnnouncements",
+      component: WorkerAnnouncements,
+      meta: { role: "Worker" },
+    },
+    {
       path: "/worker/clock",
       name: "workerClockInOut",
       component: WorkerClockInOut,
@@ -102,6 +132,12 @@ const router = createRouter({
       name: "budget",
       component: Budget,
       meta: { role: "Manager" },
+    },
+    {
+      path: "/manager/clockin",
+      name: "managerClockin",
+      component: ManagerClockin,
+      meta: { role: "Manager", kiosk: true },
     },
     {
       path: "/worker/settings",

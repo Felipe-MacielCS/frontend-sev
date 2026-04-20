@@ -99,6 +99,7 @@
           <v-tabs v-model="viewDialog.tab" color="primary" class="manager-user-tabs">
             <v-tab value="info">Info</v-tab>
             <v-tab value="calendar">Calendar</v-tab>
+            <v-tab value="clock-history">Clock History</v-tab>
           </v-tabs>
 
           <!-- Body -->
@@ -164,6 +165,51 @@
                 </v-alert>
 
               </v-window-item>
+
+              <v-window-item value="clock-history">
+                <div class="d-flex align-center justify-space-between mb-3">
+                  <div class="text-subtitle-2 font-weight-bold">Clock History</div>
+                  <v-btn variant="text" :loading="clockHistory.loading" @click="reloadClockHistoryForDialog('view')">
+                    Refresh
+                  </v-btn>
+                </div>
+
+                <v-alert v-if="clockHistory.error" type="error" variant="tonal" class="mb-3">
+                  {{ clockHistory.error }}
+                </v-alert>
+
+                <v-alert
+                  v-else-if="!clockHistory.loading && !clockHistory.records.length"
+                  type="info"
+                  variant="tonal"
+                  class="mb-3"
+                >
+                  No clock history found for this worker yet.
+                </v-alert>
+
+                <div v-else class="clock-history-table-wrap">
+                  <v-table>
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Shift</th>
+                        <th>Clock In</th>
+                        <th>Clock Out</th>
+                        <th>Time Worked</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="record in clockHistory.records" :key="record.id">
+                        <td>{{ record.shiftDate }}</td>
+                        <td>{{ record.shiftLabel }}</td>
+                        <td>{{ formatClockDateTime(record.clockInTime) }}</td>
+                        <td>{{ record.clockOutTime ? formatClockDateTime(record.clockOutTime) : "Active" }}</td>
+                        <td>{{ formatWorkedDuration(record.clockInTime, record.clockOutTime) }}</td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                </div>
+              </v-window-item>
             </v-window>
           </div>
 
@@ -186,6 +232,7 @@
       <v-tabs v-model="editDialog.tab" color="primary" class="manager-user-tabs">
         <v-tab value="info">Info</v-tab>
         <v-tab value="calendar">Calendar</v-tab>
+        <v-tab value="clock-history">Clock History</v-tab>
       </v-tabs>
 
       <v-alert
@@ -216,7 +263,7 @@
                   color="#8b1e1e"
                 >
                   <v-radio label="Active" value="active" />
-                  <v-radio label="Deactive" value="inactive" />
+                  <v-radio label="Inactive" value="inactive" />
                 </v-radio-group>
               </div>
 
@@ -272,6 +319,51 @@
               No events to display with the current filters.
             </v-alert>
           </v-window-item>
+
+          <v-window-item value="clock-history">
+            <div class="d-flex align-center justify-space-between mb-3">
+              <div class="text-subtitle-2 font-weight-bold">Clock History</div>
+              <v-btn variant="text" :loading="clockHistory.loading" @click="reloadClockHistoryForDialog('edit')">
+                Refresh
+              </v-btn>
+            </div>
+
+            <v-alert v-if="clockHistory.error" type="error" variant="tonal" class="mb-3">
+              {{ clockHistory.error }}
+            </v-alert>
+
+            <v-alert
+              v-else-if="!clockHistory.loading && !clockHistory.records.length"
+              type="info"
+              variant="tonal"
+              class="mb-3"
+            >
+              No clock history found for this worker yet.
+            </v-alert>
+
+            <div v-else class="clock-history-table-wrap">
+              <v-table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Shift</th>
+                    <th>Clock In</th>
+                    <th>Clock Out</th>
+                    <th>Time Worked</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="record in clockHistory.records" :key="record.id">
+                    <td>{{ record.shiftDate }}</td>
+                    <td>{{ record.shiftLabel }}</td>
+                    <td>{{ formatClockDateTime(record.clockInTime) }}</td>
+                    <td>{{ record.clockOutTime ? formatClockDateTime(record.clockOutTime) : "Active" }}</td>
+                    <td>{{ formatWorkedDuration(record.clockInTime, record.clockOutTime) }}</td>
+                  </tr>
+                </tbody>
+              </v-table>
+            </div>
+          </v-window-item>
         </v-window>
       </div>
 
@@ -313,12 +405,19 @@
           <thead>
             <tr>
               <th>Position</th>
+              <th>Color</th>
               <th class="text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="position in availablePositions" :key="getPositionId(position)">
               <td>{{ position.title || `Position ${getPositionId(position)}` }}</td>
+              <td>
+                <span
+                  class="position-color-swatch"
+                  :style="{ backgroundColor: getManagedPositionColor(position) }"
+                />
+              </td>
               <td class="text-right">
                 <v-btn
                   size="small"
@@ -347,7 +446,7 @@
               </td>
             </tr>
             <tr @click="startAddManagedPosition" class="manage-position-add-row">
-              <td colspan="2">
+              <td colspan="3">
                 <div class="d-flex align-center ga-2">
                   <v-icon size="18">mdi-plus</v-icon>
                   <span>Add new position</span>
@@ -369,16 +468,55 @@
             {{ managePositionsDialog.form.positionID ? "Edit Position" : "Add Position" }}
           </div>
 
-          <v-text-field
-            v-model="managePositionsDialog.form.title"
-            label="Position name"
-            variant="outlined"
-            density="comfortable"
-            hide-details="auto"
-            autofocus
-            class="mb-4"
-            @keyup.enter="submitManagedPosition"
-          />
+          <v-row dense>
+            <v-col cols="12" sm="8">
+              <v-text-field
+                v-model="managePositionsDialog.form.title"
+                label="Position name"
+                variant="outlined"
+                density="comfortable"
+                hide-details="auto"
+                autofocus
+                class="mb-4"
+                @keyup.enter="submitManagedPosition"
+              />
+            </v-col>
+            <v-col cols="12" sm="4">
+              <v-select
+                v-model="managePositionsDialog.form.color"
+                label="Color"
+                :items="positionColorOptions"
+                item-title="label"
+                item-value="value"
+                variant="outlined"
+                density="comfortable"
+                hide-details="auto"
+                class="mb-4"
+                :menu-props="{ maxHeight: 280 }"
+              >
+                <template #selection="{ item }">
+                  <div class="d-flex align-center ga-4">
+                    <span
+                      class="position-color-swatch"
+                      :style="{ backgroundColor: item.raw.value }"
+                    />
+                    <span>{{ item.raw.label }}</span>
+                  </div>
+                </template>
+
+                <template #item="{ props, item }">
+                  <v-list-item v-bind="props">
+                    <template #prepend>
+                      <span
+                        class="position-color-swatch"
+                        :style="{ backgroundColor: item.raw.value }"
+                      />
+                    </template>
+                  </v-list-item>
+                </template>
+              </v-select>
+            </v-col>
+          </v-row>
 
           <div class="d-flex justify-end ga-2">
             <v-btn variant="text" @click="resetManagePositionForm">Cancel</v-btn>
@@ -454,7 +592,14 @@ import userPostionServices from "../services/userPostionServices.js";
 import userShiftServices from "../services/userShiftServices.js";
 import shiftServices from "../services/shiftServices.js";
 import scheduleServices from "../services/scheduleServices.js";
+import clockInOutServices from "../services/clockInOutServices.js";
 import UserCalendar from "../components/UserCalendar.vue";
+import {
+  COLOR_OPTIONS,
+  getDefaultPositionColor,
+  getPositionColor,
+  normalizePositionColor,
+} from "../utils/positionColors.js";
 
 export default {
   name: "ManagerUsers",
@@ -506,6 +651,7 @@ export default {
           open: false,
           positionID: null,
           title: "",
+          color: getDefaultPositionColor(),
         },
         assignment: {
           open: false,
@@ -515,6 +661,11 @@ export default {
 
       // all events for the selected user (unavailability + shifts)
       userCalendarEvents: [],
+      clockHistory: {
+        loading: false,
+        error: "",
+        records: [],
+      },
     };
   },
 
@@ -540,6 +691,10 @@ export default {
       );
     },
 
+    positionColorOptions() {
+      return COLOR_OPTIONS;
+    },
+
     filteredUserCalendarEvents() {
       return this.userCalendarEvents.filter((e) => {
         if (e.kind === "unavailability" && !this.calendarFilters.showUnavailability) return false;
@@ -562,6 +717,9 @@ export default {
       if (tab === "calendar") {
         this.$nextTick(() => setTimeout(() => this.$refs.userCalendar?.updateSize(), 100));
       }
+      if (tab === "clock-history" && this.viewDialog.user) {
+        this.loadClockHistoryForUser(this.viewDialog.user);
+      }
     },
     "editDialog.open"(open) {
       if (open) {
@@ -571,6 +729,9 @@ export default {
     "editDialog.tab"(tab) {
       if (tab === "calendar") {
         this.$nextTick(() => setTimeout(() => this.$refs.editUserCalendar?.updateSize(), 100));
+      }
+      if (tab === "clock-history" && this.editDialog.user) {
+        this.loadClockHistoryForUser(this.editDialog.user);
       }
     },
     filteredUserCalendarEvents() {
@@ -610,6 +771,13 @@ export default {
 
     getPositionId(position) {
       return position?.positionID ?? position?.ID ?? position?.id ?? null;
+    },
+
+    getManagedPositionColor(position) {
+      return normalizePositionColor(
+        getPositionColor(position, this.getPositionId(position)),
+        getDefaultPositionColor()
+      );
     },
 
     async loadPositions(departmentID) {
@@ -716,6 +884,7 @@ export default {
           open: true,
           positionID: null,
           title: "",
+          color: getDefaultPositionColor(),
         },
         assignment: {
           ...this.managePositionsDialog.assignment,
@@ -870,6 +1039,7 @@ export default {
       this.viewDialog.open = false;
       this.viewDialog.user = null;
       this.userCalendarEvents = [];
+      this.resetClockHistory();
     },
 
     async openEditUserDialog(user) {
@@ -893,6 +1063,85 @@ export default {
         status: "active",
         positionIDs: [],
       };
+      this.resetClockHistory();
+    },
+    resetClockHistory() {
+      this.clockHistory = {
+        loading: false,
+        error: "",
+        records: [],
+      };
+    },
+    formatClockDateTime(value) {
+      if (!value) return "-";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return date.toLocaleString();
+    },
+    formatWorkedDuration(clockInTime, clockOutTime) {
+      if (!clockInTime) return "-";
+      const start = new Date(clockInTime);
+      const end = clockOutTime ? new Date(clockOutTime) : new Date();
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return "-";
+
+      const totalMinutes = Math.max(0, Math.round((end - start) / 60000));
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+    },
+    async loadClockHistoryForUser(user) {
+      const userID = this.getUserId(user);
+      if (!userID) return;
+
+      this.clockHistory = {
+        loading: true,
+        error: "",
+        records: [],
+      };
+
+      try {
+        const assignmentsRes = await userShiftServices.getAll({ userID });
+        const assignments = Array.isArray(assignmentsRes) ? assignmentsRes : [];
+
+        const historyRows = await Promise.all(
+          assignments.map(async (assignment) => {
+            const userShiftID = this.getUserId({ ID: assignment?.ID });
+            const shiftID = Number(assignment?.shiftID);
+            if (!userShiftID || !Number.isFinite(shiftID)) return [];
+
+            const [shift, clockRecords] = await Promise.all([
+              shiftServices.get(shiftID),
+              clockInOutServices.getByUserShift(userShiftID),
+            ]);
+
+            const rows = Array.isArray(clockRecords) ? clockRecords : [];
+            return rows.map((record) => ({
+              id: record.ID,
+              shiftDate: shift?.shift_date || "Unknown date",
+              shiftLabel: `${String(shift?.start_time || "").slice(0, 5)} - ${String(shift?.end_time || "").slice(0, 5)}`,
+              clockInTime: record.clock_in_time,
+              clockOutTime: record.clock_out_time,
+            }));
+          })
+        );
+
+        this.clockHistory = {
+          loading: false,
+          error: "",
+          records: historyRows.flat().sort((a, b) => new Date(b.clockInTime) - new Date(a.clockInTime)),
+        };
+      } catch (error) {
+        console.error("Failed to load clock history:", error?.response?.data || error);
+        this.clockHistory = {
+          loading: false,
+          error: error?.response?.data?.message || "Failed to load clock history.",
+          records: [],
+        };
+      }
+    },
+    async reloadClockHistoryForDialog(source) {
+      const user = source === "edit" ? this.editDialog.user : this.viewDialog.user;
+      await this.loadClockHistoryForUser(user);
     },
 
     async saveEditUserDialog() {
@@ -948,6 +1197,7 @@ export default {
           open: false,
           positionID: null,
           title: "",
+          color: getDefaultPositionColor(),
         },
         assignment: {
           open: false,
@@ -969,6 +1219,7 @@ export default {
           open: false,
           positionID: null,
           title: "",
+          color: getDefaultPositionColor(),
         },
         assignment: {
           open: false,
@@ -985,6 +1236,7 @@ export default {
           open: false,
           positionID: null,
           title: "",
+          color: getDefaultPositionColor(),
         },
       };
     },
@@ -998,6 +1250,7 @@ export default {
           open: true,
           positionID: this.getPositionId(position),
           title: position?.title || "",
+          color: this.getManagedPositionColor(position),
         },
         assignment: {
           ...this.managePositionsDialog.assignment,
@@ -1073,15 +1326,21 @@ export default {
 
       try {
         let response;
+        const color = normalizePositionColor(
+          this.managePositionsDialog.form.color,
+          getDefaultPositionColor()
+        );
         if (editingPositionID) {
           response = await positionServices.update(editingPositionID, {
             title,
             departmentID,
+            color,
           });
         } else {
           response = await positionServices.create({
             title,
             departmentID,
+            color,
             isActive: true,
           });
         }
@@ -1113,6 +1372,7 @@ export default {
             open: false,
             positionID: null,
             title: "",
+            color: getDefaultPositionColor(),
           },
         };
       } catch (error) {
@@ -1300,14 +1560,25 @@ export default {
                     !!shift &&
                     officialScheduleIDs.has(Number(shift.scheduleID))
                 )
-                .map((shift) => ({
-                  id: `shift-${shift.ID}`,
-                  title: "Assigned Shift",
-                  start: `${shift.shift_date}T${String(shift.start_time || "").slice(0, 5)}:00`,
-                  end: `${shift.shift_date}T${String(shift.end_time || "").slice(0, 5)}:00`,
-                  kind: "shift",
-                  color: "#2e7d32",
-                }));
+                .map((shift) => {
+                  const position = this.availablePositions.find(
+                    (item) => String(this.getPositionId(item)) === String(shift.positionID)
+                  );
+
+                  return {
+                    id: `shift-${shift.ID}`,
+                    title: position?.title || "Assigned Shift",
+                    start: `${shift.shift_date}T${String(shift.start_time || "").slice(0, 5)}:00`,
+                    end: `${shift.shift_date}T${String(shift.end_time || "").slice(0, 5)}:00`,
+                    kind: "shift",
+                    color: getPositionColor(position, shift.positionID),
+                    textColor: "#ffffff",
+                    extendedProps: {
+                      shiftID: shift.ID,
+                      positionID: shift.positionID || null,
+                    },
+                  };
+                });
 
         const unavailabilityEvents = unavailabilityBlocks
           .map((block) => this.normalizeUnavailabilityEvent(block))
@@ -1359,6 +1630,16 @@ export default {
 .manage-position-form-card {
   background: #fff;
   border-color: rgba(139, 30, 30, 0.14);
+}
+
+.position-color-swatch {
+  display: inline-block;
+  width: 28px;
+  height: 18px;
+  margin-right: 18px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 4px;
+  vertical-align: middle;
 }
 
 .fill-height {
