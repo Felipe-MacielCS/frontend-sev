@@ -14,6 +14,7 @@ import ManagerAvailability from "./views/ManagerAvailability.vue";
 import ManagerUsers from "./views/ManagerUsers.vue";
 import ManagerTradeBoard from "./views/ManagerTradeBoard.vue";
 import ManagerTasklists from "./views/ManagerTasklists.vue";
+import ManagerClockin from "./views/ManagerClockin.vue";
 
 import WorkerTradeBoard from "./views/WorkerTradeBoard.vue";
 import WorkerAnnouncements from "./views/WorkerAnnouncements.vue";
@@ -131,6 +132,12 @@ const router = createRouter({
       name: "budget",
       component: Budget,
       meta: { role: "Manager" },
+    },
+    {
+      path: "/manager/clockin",
+      name: "managerClockin",
+      component: ManagerClockin,
+      meta: { role: "Manager", kiosk: true },
     },
     {
       path: "/worker/settings",

@@ -165,8 +165,8 @@
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="record in clockHistory.records" :key="record.id">
-                        <td>{{ record.shiftDate }}</td>
+                      <tr v-for="record in weeklyClockHistoryRecords" :key="record.id">
+                        <td>{{ formatClockDate(record.shiftDate) }}</td>
                         <td>{{ record.shiftLabel }}</td>
                         <td>{{ record.clockInTime ? formatClockDateTime(record.clockInTime) : "-" }}</td>
                         <td>{{ record.isMissingLog ? "-" : record.clockOutTime ? formatClockDateTime(record.clockOutTime) : "Active" }}</td>
@@ -301,8 +301,8 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="record in clockHistory.records" :key="record.id">
-                    <td>{{ record.shiftDate }}</td>
+                  <tr v-for="record in weeklyClockHistoryRecords" :key="record.id">
+                    <td>{{ formatClockDate(record.shiftDate) }}</td>
                     <td>{{ record.shiftLabel }}</td>
                     <td>{{ record.clockInTime ? formatClockDateTime(record.clockInTime) : "-" }}</td>
                     <td>{{ record.isMissingLog ? "-" : record.clockOutTime ? formatClockDateTime(record.clockOutTime) : "Active" }}</td>
@@ -582,6 +582,73 @@
       </div>
     </v-card>
   </v-dialog>
+
+  <v-dialog v-model="clockCorrectionDialog.open" max-width="560">
+    <v-card class="pa-4">
+      <div class="d-flex align-center justify-space-between mb-3">
+        <div>
+          <div class="text-h6 font-weight-bold">
+            {{ clockCorrectionDialog.mode === "create" ? "Add Clock Log" : "Edit Clock Log" }}
+          </div>
+          <div class="text-body-2 text-medium-emphasis">
+            {{ formatClockDate(clockCorrectionDialog.record?.shiftDate) }}
+            {{ clockCorrectionDialog.record?.shiftLabel }}
+          </div>
+        </div>
+        <v-btn icon="mdi-close" variant="text" @click="closeClockCorrectionDialog" />
+      </div>
+
+      <v-text-field
+        v-model="clockCorrectionDialog.form.clockIn"
+        label="Clock in"
+        type="datetime-local"
+        variant="outlined"
+        density="comfortable"
+        class="mb-3"
+      />
+
+      <v-text-field
+        v-model="clockCorrectionDialog.form.clockOut"
+        label="Clock out"
+        type="datetime-local"
+        variant="outlined"
+        density="comfortable"
+      />
+      <div class="d-flex justify-end ga-2 mt-5">
+        <v-btn variant="text" @click="closeClockCorrectionDialog">Cancel</v-btn>
+        <v-btn
+          color="#8b1e1e"
+          class="text-white"
+          :disabled="!canSubmitClockCorrection"
+          @click="requestClockCorrectionConfirmation"
+        >
+          Review Change
+        </v-btn>
+      </div>
+    </v-card>
+  </v-dialog>
+
+  <v-dialog v-model="clockCorrectionConfirm.open" max-width="520">
+    <v-card class="pa-4">
+      <div class="text-h6 font-weight-bold mb-3">Confirm Clock Correction</div>
+      <v-sheet rounded="lg" border class="pa-3 mb-4">
+        <div><b>Clock in:</b> {{ formatClockDateTime(clockCorrectionConfirm.clockIn) }}</div>
+        <div><b>Clock out:</b> {{ clockCorrectionConfirm.clockOut ? formatClockDateTime(clockCorrectionConfirm.clockOut) : "Active / blank" }}</div>
+      </v-sheet>
+
+      <div class="d-flex justify-end ga-2">
+        <v-btn variant="text" @click="clockCorrectionConfirm.open = false">Cancel</v-btn>
+        <v-btn
+          color="#8b1e1e"
+          class="text-white"
+          :loading="clockCorrectionDialog.saving"
+          @click="saveClockCorrection"
+        >
+          Confirm Save
+        </v-btn>
+      </div>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script>
@@ -666,6 +733,23 @@ export default {
         loading: false,
         error: "",
         records: [],
+        weekStart: "",
+      },
+      clockCorrectionDialog: {
+        open: false,
+        mode: "edit",
+        saving: false,
+        error: "",
+        record: null,
+        form: {
+          clockIn: "",
+          clockOut: "",
+        },
+      },
+      clockCorrectionConfirm: {
+        open: false,
+        clockIn: "",
+        clockOut: "",
       },
       clockCorrectionDialog: {
         open: false,
@@ -713,6 +797,58 @@ export default {
         if (e.kind === "shift" && !this.calendarFilters.showShifts) return false;
         return true;
       });
+    },
+
+    clockHistoryWeekRange() {
+      const weekStart = this.parseLocalDate(this.clockHistory.weekStart) || this.getStartOfWeek(new Date());
+      const weekEnd = this.addDays(weekStart, 6);
+      return {
+        start: weekStart,
+        end: weekEnd,
+        startISO: this.toISODate(weekStart),
+        endISO: this.toISODate(weekEnd),
+      };
+    },
+
+    clockHistoryWeekLabel() {
+      const { start, end } = this.clockHistoryWeekRange;
+      const formatter = new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+      return `${formatter.format(start)} - ${formatter.format(end)}`;
+    },
+
+    weeklyClockHistoryRecords() {
+      const { startISO, endISO } = this.clockHistoryWeekRange;
+      return this.clockHistory.records
+        .filter((record) => {
+          const recordDate = this.normalizeClockRecordDate(record);
+          return recordDate >= startISO && recordDate <= endISO;
+        })
+        .sort((a, b) => {
+          const aDate = new Date(`${this.normalizeClockRecordDate(a)}T${a.shiftStartTime || "00:00"}:00`);
+          const bDate = new Date(`${this.normalizeClockRecordDate(b)}T${b.shiftStartTime || "00:00"}:00`);
+          return aDate - bDate;
+        });
+    },
+
+    weeklyClockHistoryTotal() {
+      const totalMinutes = this.weeklyClockHistoryRecords.reduce(
+        (sum, record) => sum + this.getWorkedMinutes(record.clockInTime, record.clockOutTime),
+        0
+      );
+      return this.formatMinutes(totalMinutes);
+    },
+
+    canSubmitClockCorrection() {
+      const clockIn = this.parseDateTimeLocal(this.clockCorrectionDialog.form.clockIn);
+      const clockOut = this.parseDateTimeLocal(this.clockCorrectionDialog.form.clockOut);
+      if (!clockIn) return false;
+      if (this.clockCorrectionDialog.form.clockOut && !clockOut) return false;
+      if (clockOut && clockOut <= clockIn) return false;
+      return true;
     },
   },
   async mounted() {
@@ -775,6 +911,63 @@ export default {
       const safeDate = date || "1970-01-01";
       const safeTime = (time || "00:00:00").toString().substring(0, 8);
       return `${safeDate}T${safeTime}`;
+    },
+
+    toDatetimeLocal(value) {
+      if (!value) return "";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      const hours = String(date.getHours()).padStart(2, "0");
+      const minutes = String(date.getMinutes()).padStart(2, "0");
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    },
+
+    parseDateTimeLocal(value) {
+      if (!value) return null;
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? null : date;
+    },
+
+    localDateTimeToPayload(value) {
+      const date = this.parseDateTimeLocal(value);
+      return date ? date.toISOString() : null;
+    },
+
+    parseLocalDate(value) {
+      if (!value) return null;
+      const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+      return Number.isNaN(date.getTime()) ? null : date;
+    },
+
+    toISODate(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    },
+
+    addDays(date, days) {
+      const next = new Date(date);
+      next.setDate(next.getDate() + days);
+      return next;
+    },
+
+    getStartOfWeek(date) {
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+      start.setDate(start.getDate() - start.getDay());
+      return start;
+    },
+
+    normalizeClockRecordDate(record) {
+      if (record?.shiftDate && /^\d{4}-\d{2}-\d{2}$/.test(String(record.shiftDate))) {
+        return record.shiftDate;
+      }
+      const fallback = new Date(record?.clockInTime);
+      return Number.isNaN(fallback.getTime()) ? "" : this.toISODate(fallback);
     },
 
     getUserId(user) {
@@ -959,7 +1152,6 @@ export default {
           }
         } catch (error) {
           if (!this.isNotFound(error)) {
-            console.error("Failed to load user unavailability:", error?.response?.data || error);
             return [];
           }
         }
@@ -1033,7 +1225,6 @@ export default {
         await this.loadWorkerPositions();
       } catch (e) {
         this.error = e?.response?.data?.message || "Failed to load workers.";
-        console.error(e?.response?.data || e);
       } finally {
         this.loading = false;
         this.positionsLoading = false;
@@ -1082,6 +1273,7 @@ export default {
         loading: false,
         error: "",
         records: [],
+        weekStart: this.toISODate(this.getStartOfWeek(new Date())),
       };
     },
     formatClockDateTime(value) {
@@ -1131,14 +1323,126 @@ export default {
     },
     formatWorkedDuration(clockInTime, clockOutTime) {
       if (!clockInTime) return "-";
+      return this.formatMinutes(this.getWorkedMinutes(clockInTime, clockOutTime));
+    },
+    getWorkedMinutes(clockInTime, clockOutTime) {
+      if (!clockInTime) return 0;
       const start = new Date(clockInTime);
       const end = clockOutTime ? new Date(clockOutTime) : new Date();
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return "-";
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
 
-      const totalMinutes = Math.max(0, Math.round((end - start) / 60000));
+      return Math.max(0, Math.round((end - start) / 60000));
+    },
+    formatMinutes(totalMinutes) {
       const hours = Math.floor(totalMinutes / 60);
       const minutes = totalMinutes % 60;
       return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+    },
+    changeClockHistoryWeek(direction) {
+      const currentStart = this.parseLocalDate(this.clockHistory.weekStart) || this.getStartOfWeek(new Date());
+      const nextStart = this.addDays(currentStart, direction * 7);
+      this.clockHistory = {
+        ...this.clockHistory,
+        weekStart: this.toISODate(nextStart),
+      };
+    },
+    goToCurrentClockHistoryWeek() {
+      this.clockHistory = {
+        ...this.clockHistory,
+        weekStart: this.toISODate(this.getStartOfWeek(new Date())),
+      };
+    },
+    openClockCorrectionDialog(record) {
+      const defaultClockIn =
+        record.clockInTime ||
+        `${record.shiftDate}T${record.shiftStartTime || "00:00"}:00`;
+      const defaultClockOut =
+        record.clockOutTime ||
+        (record.isMissingLog ? `${record.shiftDate}T${record.shiftEndTime || "00:00"}:00` : "");
+
+      this.clockCorrectionDialog = {
+        open: true,
+        mode: record.isMissingLog ? "create" : "edit",
+        saving: false,
+        error: "",
+        record,
+        form: {
+          clockIn: this.toDatetimeLocal(defaultClockIn),
+          clockOut: this.toDatetimeLocal(defaultClockOut),
+        },
+      };
+      this.clockCorrectionConfirm = {
+        open: false,
+        clockIn: "",
+        clockOut: "",
+      };
+    },
+    closeClockCorrectionDialog() {
+      this.clockCorrectionDialog = {
+        open: false,
+        mode: "edit",
+        saving: false,
+        error: "",
+        record: null,
+        form: {
+          clockIn: "",
+          clockOut: "",
+        },
+      };
+      this.clockCorrectionConfirm = {
+        open: false,
+        clockIn: "",
+        clockOut: "",
+      };
+    },
+    requestClockCorrectionConfirmation() {
+      if (!this.canSubmitClockCorrection) {
+        this.clockCorrectionDialog.error = "Enter a valid clock-in time and an optional clock-out time after it.";
+        return;
+      }
+
+      this.clockCorrectionDialog.error = "";
+      this.clockCorrectionConfirm = {
+        open: true,
+        clockIn: this.localDateTimeToPayload(this.clockCorrectionDialog.form.clockIn),
+        clockOut: this.clockCorrectionDialog.form.clockOut
+          ? this.localDateTimeToPayload(this.clockCorrectionDialog.form.clockOut)
+          : null,
+      };
+    },
+    async saveClockCorrection() {
+      const record = this.clockCorrectionDialog.record;
+      if (!record) return;
+
+      const payload = {
+        clock_in_time: this.clockCorrectionConfirm.clockIn,
+        clock_out_time: this.clockCorrectionConfirm.clockOut,
+      };
+
+      try {
+        this.clockCorrectionDialog.saving = true;
+        this.clockCorrectionDialog.error = "";
+
+        if (this.clockCorrectionDialog.mode === "create") {
+          await clockInOutServices.create({
+            ...payload,
+            user_shift_id: record.userShiftID,
+          });
+        } else {
+          await clockInOutServices.update(record.id, payload);
+        }
+
+        const activeUser = this.editDialog.open ? this.editDialog.user : this.viewDialog.user;
+        await this.loadClockHistoryForUser(activeUser);
+        this.closeClockCorrectionDialog();
+      } catch (error) {
+        this.clockCorrectionDialog = {
+          ...this.clockCorrectionDialog,
+          saving: false,
+          error: error?.response?.data?.message || "Failed to save clock correction.",
+        };
+        this.clockCorrectionConfirm.open = false;
+      }
     },
     async loadClockHistoryForUser(user) {
       const userID = this.getUserId(user);
@@ -1147,7 +1451,8 @@ export default {
       this.clockHistory = {
         loading: true,
         error: "",
-        records: [],
+        records: this.clockHistory.records,
+        weekStart: this.clockHistory.weekStart || this.toISODate(this.getStartOfWeek(new Date())),
       };
 
       try {
@@ -1194,6 +1499,20 @@ export default {
               clockOutTime: record.clock_out_time,
               isMissingLog: false,
             }));
+
+            if (logRows.length) return logRows;
+
+            return [{
+              id: `missing-${userShiftID}`,
+              userShiftID,
+              shiftDate: shift?.shift_date || "Unknown date",
+              shiftLabel: `${String(shift?.start_time || "").slice(0, 5)} - ${String(shift?.end_time || "").slice(0, 5)}`,
+              shiftStartTime: String(shift?.start_time || "").slice(0, 5),
+              shiftEndTime: String(shift?.end_time || "").slice(0, 5),
+              clockInTime: null,
+              clockOutTime: null,
+              isMissingLog: true,
+            }];
           })
         );
 
@@ -1207,11 +1526,11 @@ export default {
           }),
         };
       } catch (error) {
-        console.error("Failed to load clock history:", error?.response?.data || error);
         this.clockHistory = {
           loading: false,
           error: error?.response?.data?.message || "Failed to load clock history.",
           records: [],
+          weekStart: this.clockHistory.weekStart || this.toISODate(this.getStartOfWeek(new Date())),
         };
       }
     },
@@ -1330,7 +1649,6 @@ export default {
         this.editDialog.user = refreshedUser;
         this.closeEditUserDialog();
       } catch (error) {
-        console.error("Failed to save user edits:", error?.response?.data || error);
         this.editDialog.error = error?.response?.data?.message || "Failed to save worker changes.";
       } finally {
         this.editDialog.saving = false;
@@ -1529,7 +1847,6 @@ export default {
           },
         };
       } catch (error) {
-        console.error("Failed to create position:", error?.response?.data || error);
         this.managePositionsDialog = {
           ...this.managePositionsDialog,
           saving: false,
@@ -1568,7 +1885,6 @@ export default {
           };
         }
       } catch (error) {
-        console.error("Failed to delete position:", error?.response?.data || error);
         this.managePositionsDialog = {
           ...this.managePositionsDialog,
           deletingID: null,
@@ -1610,7 +1926,6 @@ export default {
         ]);
         await this.loadWorkerPositions();
       } catch (error) {
-        console.error("Failed to save position assignments:", error?.response?.data || error);
         this.managePositionsDialog = {
           ...this.managePositionsDialog,
           assignmentSaving: false,
@@ -1662,7 +1977,6 @@ export default {
 
         await this.loadWorkerPositions();
       } catch (error) {
-        console.error("Failed to assign position:", error?.response?.data || error);
       } finally {
         this.workerPositionSelections = {
           ...this.workerPositionSelections,
@@ -1739,7 +2053,6 @@ export default {
 
         this.userCalendarEvents = [...unavailabilityEvents, ...shiftEvents];
       } catch (e) {
-        console.error("Failed to load user calendar data:", e?.response?.data || e);
         this.userCalendarEvents = [];
       }
 
