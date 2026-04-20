@@ -186,9 +186,6 @@
             density="comfortable"
           />
 
-          <div class="text-body-2 text-medium-emphasis">
-            Copies the first week of shifts into future weeks as separate shifts, so each copied week can still be edited on its own.
-          </div>
           <div v-if="repeatScheduleEndLabel" class="text-body-2 text-medium-emphasis mt-2">
             The current schedule will extend through {{ repeatScheduleEndLabel }}.
           </div>
