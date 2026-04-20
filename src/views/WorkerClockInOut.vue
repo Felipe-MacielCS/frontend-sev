@@ -1,7 +1,37 @@
 <template>
   <v-container fluid class="pa-6 bg-grey-lighten-4" style="min-height: 100vh;">
     <v-row>
-      <v-col cols="12">
+      <v-col cols="12" md="4">
+        <v-card class="pa-4 bg-grey-lighten-3" elevation="1">
+          <h2 class="text-h6 font-weight-bold mb-3">Clock In / Out</h2>
+
+          <div v-if="primaryShiftContext" class="text-body-2">
+            <div class="mb-2"><b>Shift Date:</b> {{ primaryShiftContext.shift.shift_date }}</div>
+            <div class="mb-2">
+              <b>Shift Time:</b>
+              {{ toHHMM(primaryShiftContext.shift.start_time) }} -
+              {{ toHHMM(primaryShiftContext.shift.end_time) }}
+            </div>
+            <div class="mb-4">
+              <b>Status:</b>
+              {{ primaryOpenRecord ? "Clocked In" : "Ready to Clock In" }}
+            </div>
+
+            <v-btn
+              color="primary"
+              block
+              :loading="clockActionLoading"
+              @click="handleClockAction"
+            >
+              {{ primaryOpenRecord ? "Clock Out" : "Clock In" }}
+            </v-btn>
+          </div>
+
+          <div v-else />
+        </v-card>
+      </v-col>
+
+      <v-col cols="12" md="8">
         <v-card elevation="2" class="bg-white rounded-lg">
           <v-card-title class="d-flex align-center justify-space-between flex-wrap ga-3 px-4 pt-4">
             <span class="text-subtitle-1 font-weight-bold">Time Log</span>
@@ -32,11 +62,7 @@
           </v-card-title>
 
           <v-card-text>
-            <div class="text-body-2 font-weight-medium clock-week-label mb-4">
-              {{ weekLabel }}
-            </div>
-
-            <v-table v-if="weeklyTimeRecords.length">
+            <v-table v-if="timeRecords.length > 0">
               <thead>
                 <tr>
                   <th>Date</th>
