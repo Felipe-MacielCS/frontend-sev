@@ -102,19 +102,6 @@
         </div>
       </div>
 
-      <v-alert v-if="error" type="error" variant="tonal" class="mb-3">
-        {{ error }}
-      </v-alert>
-
-      <v-alert
-        v-if="!error && templates.length === 0 && !loading"
-        type="info"
-        variant="tonal"
-        class="mb-3"
-      >
-        No templates yet
-      </v-alert>
-
       <div class="calendar-frame">
         <Calendar
           ref="templateCalendar"

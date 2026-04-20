@@ -25,10 +25,6 @@
         />
       </div>
 
-      <v-alert v-if="error" type="error" variant="tonal" class="mb-4">
-        {{ error }}
-      </v-alert>
-
       <v-table>
         <thead>
           <tr>
@@ -80,15 +76,6 @@
           </h3>
           <v-btn icon="mdi-close" variant="text" @click="closeDialog" />
         </div>
-
-        <v-alert
-          v-if="dialog.error"
-          type="error"
-          variant="tonal"
-          class="mb-4"
-        >
-          {{ dialog.error }}
-        </v-alert>
 
         <v-text-field
           v-model="dialog.form.name"
@@ -172,15 +159,6 @@
           </h3>
           <v-btn icon="mdi-close" variant="text" @click="closeViewDialog" />
         </div>
-
-        <v-alert
-          v-if="viewDialog.error"
-          type="error"
-          variant="tonal"
-          class="mb-4"
-        >
-          {{ viewDialog.error }}
-        </v-alert>
 
         <div class="text-subtitle-2 font-weight-medium mb-3">Tasks</div>
 

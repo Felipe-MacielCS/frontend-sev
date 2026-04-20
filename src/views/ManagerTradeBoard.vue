@@ -32,9 +32,6 @@
               </v-chip>
             </v-chip-group>
 
-            <v-alert v-if="error" type="error" variant="tonal">
-              {{ error }}
-            </v-alert>
           </v-card-text>
         </v-card>
       </v-col>
@@ -44,9 +41,6 @@
           <v-card-title class="d-flex align-center justify-space-between ga-3 flex-wrap">
             <div>
               <div class="text-h6 font-weight-bold">Manager Trade Board</div>
-              <div class="text-body-2 text-medium-emphasis">
-                Review trade requests and assign the shift to any worker or manager in the department.
-              </div>
             </div>
             <v-btn variant="text" :loading="loading" @click="loadManagerTradeBoard">
               Refresh
@@ -63,15 +57,7 @@
               class="mb-4"
             />
 
-            <v-alert
-              v-if="!loading && !error && !visiblePosts.length"
-              type="info"
-              variant="tonal"
-            >
-              No trade requests match this manager view.
-            </v-alert>
-
-            <v-row v-else>
+            <v-row v-if="visiblePosts.length">
               <v-col v-for="post in visiblePosts" :key="post.id" cols="12">
                 <v-card variant="outlined" class="trade-post rounded-xl">
                   <v-card-text>
@@ -141,11 +127,7 @@
                         </v-btn>
                       </div>
 
-                      <v-alert v-if="!post.responses.length" type="info" variant="tonal">
-                        No one has accepted this request yet, but you can still assign any department worker or manager.
-                      </v-alert>
-
-                      <div v-else class="d-flex flex-column ga-3">
+                      <div v-if="post.responses.length" class="d-flex flex-column ga-3">
                         <div class="text-body-2 text-medium-emphasis">
                           Accepted responses are shown below for reference.
                         </div>

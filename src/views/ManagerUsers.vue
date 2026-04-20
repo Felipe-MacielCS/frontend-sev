@@ -25,19 +25,6 @@
         />
       </div>
 
-      <v-alert v-if="error" type="error" variant="tonal" class="mb-4">
-        {{ error }}
-      </v-alert>
-
-      <v-alert
-        v-if="!error && workers.length === 0 && !loading"
-        type="info"
-        variant="tonal"
-        class="mb-4"
-      >
-        No workers found for your department.
-      </v-alert>
-
       <v-table>
         <thead>
           <tr>
@@ -155,15 +142,6 @@
                   />
                 </div>
 
-                <v-alert
-                  v-if="filteredUserCalendarEvents.length === 0"
-                  type="info"
-                  variant="tonal"
-                  class="mt-3"
-                >
-                  No events to display with the current filters.
-                </v-alert>
-
               </v-window-item>
 
               <v-window-item value="clock-history">
@@ -174,20 +152,7 @@
                   </v-btn>
                 </div>
 
-                <v-alert v-if="clockHistory.error" type="error" variant="tonal" class="mb-3">
-                  {{ clockHistory.error }}
-                </v-alert>
-
-                <v-alert
-                  v-else-if="!clockHistory.loading && !clockHistory.records.length"
-                  type="info"
-                  variant="tonal"
-                  class="mb-3"
-                >
-                  No clock history found for this worker yet.
-                </v-alert>
-
-                <div v-else class="clock-history-table-wrap">
+                <div v-if="clockHistory.records.length" class="clock-history-table-wrap">
                   <v-table>
                     <thead>
                       <tr>
@@ -209,10 +174,9 @@
                         <td class="text-right">
                           <v-btn
                             size="small"
-                            variant="tonal"
-                            color="primary"
+                            color="#8b1e1e"
                             prepend-icon="mdi-pencil"
-                            class="clock-edit-btn"
+                            class="clock-edit-btn text-white"
                             @click="openClockCorrectionDialog(record)"
                           >
                             {{ record.isMissingLog ? "Add Log" : "Edit" }}
@@ -247,15 +211,6 @@
         <v-tab value="calendar">Calendar</v-tab>
         <v-tab value="clock-history">Clock History</v-tab>
       </v-tabs>
-
-      <v-alert
-        v-if="editDialog.error"
-        type="error"
-        variant="tonal"
-        class="mt-3"
-      >
-        {{ editDialog.error }}
-      </v-alert>
 
       <div class="flex-grow-1 pt-3 manager-user-dialog-body">
         <v-window v-model="editDialog.tab" class="manager-user-window">
@@ -323,14 +278,6 @@
               :isSelectable="false"
             />
 
-            <v-alert
-              v-if="filteredUserCalendarEvents.length === 0"
-              type="info"
-              variant="tonal"
-              class="mt-3"
-            >
-              No events to display with the current filters.
-            </v-alert>
           </v-window-item>
 
           <v-window-item value="clock-history">
@@ -341,20 +288,7 @@
               </v-btn>
             </div>
 
-            <v-alert v-if="clockHistory.error" type="error" variant="tonal" class="mb-3">
-              {{ clockHistory.error }}
-            </v-alert>
-
-            <v-alert
-              v-else-if="!clockHistory.loading && !clockHistory.records.length"
-              type="info"
-              variant="tonal"
-              class="mb-3"
-            >
-              No clock history found for this worker yet.
-            </v-alert>
-
-            <div v-else class="clock-history-table-wrap">
+            <div v-if="clockHistory.records.length" class="clock-history-table-wrap">
               <v-table>
                 <thead>
                   <tr>
@@ -376,10 +310,9 @@
                     <td class="text-right">
                       <v-btn
                         size="small"
-                        variant="tonal"
-                        color="primary"
+                        color="#8b1e1e"
                         prepend-icon="mdi-pencil"
-                        class="clock-edit-btn"
+                        class="clock-edit-btn text-white"
                         @click="openClockCorrectionDialog(record)"
                       >
                         {{ record.isMissingLog ? "Add Log" : "Edit" }}
@@ -466,15 +399,6 @@
         <h3 class="text-h6 font-weight-bold">Manage Positions</h3>
         <v-btn icon="mdi-close" variant="text" @click="closeManagePositionsDialog" />
       </div>
-
-      <v-alert
-        v-if="managePositionsDialog.error"
-        type="error"
-        variant="tonal"
-        class="mb-3"
-      >
-        {{ managePositionsDialog.error }}
-      </v-alert>
 
       <v-card variant="outlined" class="manage-position-list-card">
         <div class="manage-position-table-scroll">
@@ -1931,5 +1855,6 @@ export default {
 .clock-edit-btn {
   font-weight: 700;
   letter-spacing: 0.04em;
+  box-shadow: none;
 }
 </style>

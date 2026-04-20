@@ -106,9 +106,6 @@
         <div class="d-flex align-center justify-space-between mb-3 px-1">
           <div>
             <div class="text-h6 font-weight-bold">Budget</div>
-            <div class="text-body-2 text-medium-emphasis">
-              Department budget overview and cost tracking
-            </div>
           </div>
         </div>
 

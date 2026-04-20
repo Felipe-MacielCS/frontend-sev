@@ -5,9 +5,6 @@
         <div class="page-header mb-6">
           <div class="text-overline page-kicker">Manager Announcements</div>
           <h1 class="text-h4 font-weight-bold mb-2">Announcements</h1>
-          <p class="text-body-1 text-medium-emphasis mb-0">
-            Write the message you want to send to your team by email.
-          </p>
         </div>
 
         <v-card class="rounded-xl announcement-card" elevation="2">
@@ -83,9 +80,6 @@
                 <div class="history-toolbar mb-4">
                   <div>
                     <div class="text-subtitle-1 font-weight-bold">Department Announcement History</div>
-                    <div class="text-body-2 text-medium-emphasis">
-                      Review every announcement sent to workers in this department.
-                    </div>
                   </div>
 
                   <v-btn
@@ -143,23 +137,6 @@
           </v-window>
         </v-card>
 
-        <v-alert
-          v-if="submitResult"
-          type="success"
-          variant="tonal"
-          class="mt-5"
-        >
-          Sent!
-        </v-alert>
-
-        <v-alert
-          v-if="errorMessage"
-          type="error"
-          variant="tonal"
-          class="mt-5"
-        >
-          {{ errorMessage }}
-        </v-alert>
       </v-col>
     </v-row>
   </v-container>
