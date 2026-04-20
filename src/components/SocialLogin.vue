@@ -49,9 +49,7 @@ const handleCredentialResponse = async (response) => {
 
 
     const role = normalizeRole(user.value.role);
-    if (role === "worker" && user.value.needsStudentIdSetup) {
-      router.push({ name: "workerSettings", query: { setup: "student-id" } });
-    } else if (role === "admin") {
+    if (role === "admin") {
       router.push({ name: "adminDashboard" });
     } else if (role === "manager") {
       router.push({ name: "managerDashboard" });
@@ -85,3 +83,4 @@ onMounted(() => {
     </v-dialog>
   </div>
 </template>
+

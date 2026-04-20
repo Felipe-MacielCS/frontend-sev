@@ -393,12 +393,19 @@
           <thead>
             <tr>
               <th>Position</th>
+              <th>Color</th>
               <th class="text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="position in availablePositions" :key="getPositionId(position)">
               <td>{{ position.title || `Position ${getPositionId(position)}` }}</td>
+              <td>
+                <span
+                  class="position-color-swatch"
+                  :style="{ backgroundColor: getManagedPositionColor(position) }"
+                />
+              </td>
               <td class="text-right">
                 <v-btn
                   size="small"
@@ -427,7 +434,7 @@
               </td>
             </tr>
             <tr @click="startAddManagedPosition" class="manage-position-add-row">
-              <td colspan="2">
+              <td colspan="3">
                 <div class="d-flex align-center ga-2">
                   <v-icon size="18">mdi-plus</v-icon>
                   <span>Add new position</span>
@@ -449,16 +456,55 @@
             {{ managePositionsDialog.form.positionID ? "Edit Position" : "Add Position" }}
           </div>
 
-          <v-text-field
-            v-model="managePositionsDialog.form.title"
-            label="Position name"
-            variant="outlined"
-            density="comfortable"
-            hide-details="auto"
-            autofocus
-            class="mb-4"
-            @keyup.enter="submitManagedPosition"
-          />
+          <v-row dense>
+            <v-col cols="12" sm="8">
+              <v-text-field
+                v-model="managePositionsDialog.form.title"
+                label="Position name"
+                variant="outlined"
+                density="comfortable"
+                hide-details="auto"
+                autofocus
+                class="mb-4"
+                @keyup.enter="submitManagedPosition"
+              />
+            </v-col>
+            <v-col cols="12" sm="4">
+              <v-select
+                v-model="managePositionsDialog.form.color"
+                label="Color"
+                :items="positionColorOptions"
+                item-title="label"
+                item-value="value"
+                variant="outlined"
+                density="comfortable"
+                hide-details="auto"
+                class="mb-4"
+                :menu-props="{ maxHeight: 280 }"
+              >
+                <template #selection="{ item }">
+                  <div class="d-flex align-center ga-4">
+                    <span
+                      class="position-color-swatch"
+                      :style="{ backgroundColor: item.raw.value }"
+                    />
+                    <span>{{ item.raw.label }}</span>
+                  </div>
+                </template>
+
+                <template #item="{ props, item }">
+                  <v-list-item v-bind="props">
+                    <template #prepend>
+                      <span
+                        class="position-color-swatch"
+                        :style="{ backgroundColor: item.raw.value }"
+                      />
+                    </template>
+                  </v-list-item>
+                </template>
+              </v-select>
+            </v-col>
+          </v-row>
 
           <div class="d-flex justify-end ga-2">
             <v-btn variant="text" @click="resetManagePositionForm">Cancel</v-btn>
@@ -603,6 +649,12 @@ import shiftServices from "../services/shiftServices.js";
 import scheduleServices from "../services/scheduleServices.js";
 import clockInOutServices from "../services/clockInOutServices.js";
 import UserCalendar from "../components/UserCalendar.vue";
+import {
+  COLOR_OPTIONS,
+  getDefaultPositionColor,
+  getPositionColor,
+  normalizePositionColor,
+} from "../utils/positionColors.js";
 
 export default {
   name: "ManagerUsers",
@@ -654,6 +706,7 @@ export default {
           open: false,
           positionID: null,
           title: "",
+          color: getDefaultPositionColor(),
         },
         assignment: {
           open: false,
@@ -708,6 +761,10 @@ export default {
           (position) => String(this.getPositionId(position)) === String(selectedID)
         ) || null
       );
+    },
+
+    positionColorOptions() {
+      return COLOR_OPTIONS;
     },
 
     filteredUserCalendarEvents() {
@@ -897,6 +954,13 @@ export default {
       return position?.positionID ?? position?.ID ?? position?.id ?? null;
     },
 
+    getManagedPositionColor(position) {
+      return normalizePositionColor(
+        getPositionColor(position, this.getPositionId(position)),
+        getDefaultPositionColor()
+      );
+    },
+
     async loadPositions(departmentID) {
       const res = await positionServices.getAll({ departmentID, isActive: true, limit: 200 });
       this.availablePositions = this.extractArray(res, ["positions"]);
@@ -1001,6 +1065,7 @@ export default {
           open: true,
           positionID: null,
           title: "",
+          color: getDefaultPositionColor(),
         },
         assignment: {
           ...this.managePositionsDialog.assignment,
@@ -1448,6 +1513,7 @@ export default {
           open: false,
           positionID: null,
           title: "",
+          color: getDefaultPositionColor(),
         },
         assignment: {
           open: false,
@@ -1469,6 +1535,7 @@ export default {
           open: false,
           positionID: null,
           title: "",
+          color: getDefaultPositionColor(),
         },
         assignment: {
           open: false,
@@ -1485,6 +1552,7 @@ export default {
           open: false,
           positionID: null,
           title: "",
+          color: getDefaultPositionColor(),
         },
       };
     },
@@ -1498,6 +1566,7 @@ export default {
           open: true,
           positionID: this.getPositionId(position),
           title: position?.title || "",
+          color: this.getManagedPositionColor(position),
         },
         assignment: {
           ...this.managePositionsDialog.assignment,
@@ -1573,15 +1642,21 @@ export default {
 
       try {
         let response;
+        const color = normalizePositionColor(
+          this.managePositionsDialog.form.color,
+          getDefaultPositionColor()
+        );
         if (editingPositionID) {
           response = await positionServices.update(editingPositionID, {
             title,
             departmentID,
+            color,
           });
         } else {
           response = await positionServices.create({
             title,
             departmentID,
+            color,
             isActive: true,
           });
         }
@@ -1613,6 +1688,7 @@ export default {
             open: false,
             positionID: null,
             title: "",
+            color: getDefaultPositionColor(),
           },
         };
       } catch (error) {
@@ -1796,14 +1872,25 @@ export default {
                     !!shift &&
                     officialScheduleIDs.has(Number(shift.scheduleID))
                 )
-                .map((shift) => ({
-                  id: `shift-${shift.ID}`,
-                  title: "Assigned Shift",
-                  start: `${shift.shift_date}T${String(shift.start_time || "").slice(0, 5)}:00`,
-                  end: `${shift.shift_date}T${String(shift.end_time || "").slice(0, 5)}:00`,
-                  kind: "shift",
-                  color: "#2e7d32",
-                }));
+                .map((shift) => {
+                  const position = this.availablePositions.find(
+                    (item) => String(this.getPositionId(item)) === String(shift.positionID)
+                  );
+
+                  return {
+                    id: `shift-${shift.ID}`,
+                    title: position?.title || "Assigned Shift",
+                    start: `${shift.shift_date}T${String(shift.start_time || "").slice(0, 5)}:00`,
+                    end: `${shift.shift_date}T${String(shift.end_time || "").slice(0, 5)}:00`,
+                    kind: "shift",
+                    color: getPositionColor(position, shift.positionID),
+                    textColor: "#ffffff",
+                    extendedProps: {
+                      shiftID: shift.ID,
+                      positionID: shift.positionID || null,
+                    },
+                  };
+                });
 
         const unavailabilityEvents = unavailabilityBlocks
           .map((block) => this.normalizeUnavailabilityEvent(block))
@@ -1854,6 +1941,16 @@ export default {
 .manage-position-form-card {
   background: #fff;
   border-color: rgba(139, 30, 30, 0.14);
+}
+
+.position-color-swatch {
+  display: inline-block;
+  width: 28px;
+  height: 18px;
+  margin-right: 18px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 4px;
+  vertical-align: middle;
 }
 
 .fill-height {

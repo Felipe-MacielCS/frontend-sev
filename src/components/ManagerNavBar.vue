@@ -144,14 +144,15 @@ onBeforeUnmount(() => {
 });
 
 const navItems = [
-  { title: "Templates", to: "/manager/templates", icon: "mdi-file-document-outline" },
   { title: "Schedule", to: "/manager", icon: "mdi-calendar-month-outline" },
+  { title: "Templates", to: "/manager/templates", icon: "mdi-file-document-outline" },
   { title: "Users", to: "/manager/users", icon: "mdi-account-group-outline" },
   { title: "Budget", to: "/manager/budget", icon: "mdi-cash-multiple" },
   { title: "Trade Board", to: "/manager/tradeboard", icon: "mdi-swap-horizontal" },
   { title: "Tasklists", to: "/manager/tasklists", icon: "mdi-format-list-bulleted" },
   { title: "Announcements", to: "/manager/announcements", icon: "mdi-bullhorn-outline" },
   { title: "Unvailability", to: "/manager/availability", icon: "mdi-calendar-clock-outline" },
+  { title: "Clock-In Kiosk", to: "/manager/clockin", icon: "mdi-clock-outline" },
   { title: "Settings", to: "/manager/settings", icon: "mdi-cog-outline" },
 ];
 </script>

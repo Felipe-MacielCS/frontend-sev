@@ -13,14 +13,6 @@
           </v-card-title>
 
           <v-card-text>
-            <v-alert
-              v-if="!loading && !myAssignedShifts.length"
-              type="info"
-              variant="tonal"
-              class="mb-4"
-            >
-              You do not have any assigned shifts available to post right now.
-            </v-alert>
 
             <div class="text-subtitle-2 font-weight-medium mb-2">Choose a Date</div>
             <v-text-field
@@ -124,9 +116,6 @@
               </v-icon>
               <div class="text-subtitle-1 font-weight-medium mb-1">
                 No trade requests match this view.
-              </div>
-              <div class="text-body-2 text-medium-emphasis">
-                Try another filter or post the first request for your team.
               </div>
             </div>
 

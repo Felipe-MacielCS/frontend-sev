@@ -30,18 +30,6 @@
       {{ nextShiftCountdownLabel }}
     </v-chip>
 
-    <v-btn
-      color="white"
-      variant="tonal"
-      class="mr-2 quick-clock-topbar-btn"
-      :disabled="!quickClockContext"
-      :loading="quickClockLoading"
-      @click="handleQuickClockAction"
-    >
-      <v-icon start>{{ quickClockOpenRecord ? "mdi-clock-out" : "mdi-clock-in" }}</v-icon>
-      {{ quickClockOpenRecord ? "Clock Out" : "Clock In" }}
-    </v-btn>
-
     <NotificationMenuButton
       :items="notifications"
       :loading="notificationsLoading"
@@ -88,7 +76,6 @@ import { useRoute } from "vue-router";
 import userShiftServices from "../services/userShiftServices.js";
 import shiftServices from "../services/shiftServices.js";
 import scheduleServices from "../services/scheduleServices.js";
-import clockInOutServices from "../services/clockInOutServices.js";
 import NotificationMenuButton from "./NotificationMenuButton.vue";
 import { getWorkerNotificationFeed } from "../services/notificationFeedServices.js";
 import { subscribeToNotificationRefresh } from "../services/notificationSync.js";
@@ -100,8 +87,6 @@ const NOTIFICATION_POLL_MS = 5000;
 const drawer = ref(true);
 const route = useRoute();
 const isWorkerDashboard = computed(() => route.path === "/worker");
-const quickClockLoading = ref(false);
-const quickClockContext = ref(null);
 const quickClockContexts = ref([]);
 const notifications = ref([]);
 const notificationsLoading = ref(false);
@@ -144,39 +129,11 @@ const toHHMM = (value) => {
 
 const getShiftDateTime = (shift, key) => new Date(`${shift.shift_date}T${toHHMM(shift[key])}:00`);
 
-const pickPrimaryClockContext = (contexts) => {
-  if (!contexts.length) return null;
-
-  const openContext = contexts.find((context) =>
-    context.clockRecords.some((record) => !record.clock_out_time)
-  );
-  if (openContext) return openContext;
-
-  const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const todayContexts = contexts.filter((context) => context.shift.shift_date === today);
-
-  const activeToday = todayContexts.find((context) => {
-    const start = getShiftDateTime(context.shift, "start_time");
-    const end = getShiftDateTime(context.shift, "end_time");
-    return start <= now && now <= end;
-  });
-  if (activeToday) return activeToday;
-
-  const upcomingToday = todayContexts.find(
-    (context) => getShiftDateTime(context.shift, "start_time") >= now
-  );
-  if (upcomingToday) return upcomingToday;
-
-  if (todayContexts.length) return todayContexts[0];
-  return contexts[0];
-};
-
 const loadQuickClockData = async () => {
   try {
     const userID = getCurrentUserID();
     if (!userID) {
-      quickClockContext.value = null;
+      quickClockContexts.value = [];
       return;
     }
 
@@ -205,9 +162,7 @@ const loadQuickClockData = async () => {
         const schedule = schedulesByID[normalizeID(shift?.scheduleID)];
         if (!userShiftID || !shift || !schedule || !isOfficialSchedule(schedule)) return null;
 
-        const clockRes = await clockInOutServices.getByUserShift(userShiftID);
-        const clockRecords = Array.isArray(clockRes) ? clockRes : [];
-        return { userShiftID, shift, schedule, clockRecords };
+        return { userShiftID, shift, schedule };
       })
     );
 
@@ -216,11 +171,9 @@ const loadQuickClockData = async () => {
       .sort((a, b) => getShiftDateTime(b.shift, "start_time") - getShiftDateTime(a.shift, "start_time"));
 
     quickClockContexts.value = normalizedContexts;
-    quickClockContext.value = pickPrimaryClockContext(normalizedContexts);
   } catch (error) {
     console.error("Failed to load quick clock data:", error?.response?.data || error);
     quickClockContexts.value = [];
-    quickClockContext.value = null;
   }
 };
 
@@ -240,10 +193,6 @@ const loadNotifications = async () => {
 const handleNotificationRefresh = () => {
   loadNotifications();
 };
-
-const quickClockOpenRecord = computed(
-  () => quickClockContext.value?.clockRecords?.find((record) => !record.clock_out_time) || null
-);
 
 const nextUpcomingShiftContext = computed(() => {
   const now = nowTick.value;
@@ -275,24 +224,6 @@ const nextShiftCountdownLabel = computed(() => {
 
   return `Next shift in ${minutes}m ${String(seconds).padStart(2, "0")}s`;
 });
-
-const handleQuickClockAction = async () => {
-  if (!quickClockContext.value?.userShiftID) return;
-
-  try {
-    quickClockLoading.value = true;
-    if (quickClockOpenRecord.value) {
-      await clockInOutServices.clockOut(quickClockContext.value.userShiftID);
-    } else {
-      await clockInOutServices.clockIn(quickClockContext.value.userShiftID);
-    }
-    await loadQuickClockData();
-  } catch (error) {
-    console.error("Quick clock action failed:", error?.response?.data || error);
-  } finally {
-    quickClockLoading.value = false;
-  }
-};
 
 onMounted(() => {
   const savedDrawerState = localStorage.getItem(DRAWER_STORAGE_KEY);
@@ -377,12 +308,6 @@ const navItems = [
 <style scoped>
 .worker-topbar {
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.quick-clock-topbar-btn {
-  text-transform: none;
-  letter-spacing: 0.01em;
-  font-weight: 600;
 }
 
 .next-shift-chip {
