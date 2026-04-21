@@ -199,6 +199,11 @@ export default {
     formatShiftTime(shift) {
       return `${this.toHHMM(shift?.start_time)} - ${this.toHHMM(shift?.end_time)}`;
     },
+    isOfficialSchedule(schedule) {
+      const type = String(schedule?.type || "").trim().toLowerCase();
+      const status = String(schedule?.status || "").trim().toLowerCase();
+      return type === "official" || status === "published";
+    },
     async getManagerDepartmentID() {
       const user = this.getCurrentUser();
       const managerID = this.normalizeID(user?.ID ?? user?.id ?? user?.userID);
@@ -293,7 +298,7 @@ export default {
           const assignment = assignmentsByShiftID[shiftID];
           const userShiftID = this.getRecordID(assignment);
           const schedule = schedulesByID[this.getScheduleID(shift)] || null;
-          if (!shiftID || !userShiftID) return null;
+          if (!shiftID || !userShiftID || !schedule || !this.isOfficialSchedule(schedule)) return null;
 
           const clockResponse = await clockInOutServices.getByUserShift(userShiftID);
           const clockRecords = this.extractArray(clockResponse, ["clockinouts", "clockInOuts"]);
