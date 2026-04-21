@@ -3,12 +3,12 @@ import Utils from "../config/utils.js";
 import AuthServices from "./authServices.js";
 import Router from "../router.js";
 
-var baseurl = "";
-if (import.meta.env.DEV) {
-  baseurl = "http://localhost:3137/workerscheduling-t7/";
-} else {
-  baseurl = "/workerscheduling-t7/";
-}
+const configuredBaseUrl = String(import.meta.env.VITE_API_BASE_URL || "").trim();
+const baseurl = configuredBaseUrl || (
+  import.meta.env.DEV
+    ? "http://localhost:3137/workerscheduling-t7/"
+    : "/workerscheduling-t7/"
+);
 
 const apiClient = axios.create({
   baseURL: baseurl,

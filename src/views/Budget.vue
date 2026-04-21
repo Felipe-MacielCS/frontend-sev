@@ -23,12 +23,12 @@
               />
             </div>
 
-            <div class="d-flex ga-6">
-              <div>
+            <div class="payroll-summary-stats">
+              <div class="payroll-summary-stat">
                 <div class="text-caption text-medium-emphasis">Total Hours Worked</div>
                 <div class="text-h6 font-weight-bold">{{ formatHours(totalHoursWorked) }}</div>
               </div>
-              <div>
+              <div class="payroll-summary-stat">
                 <div class="text-caption text-medium-emphasis">Weekly Total Payroll</div>
                 <div class="text-h6 font-weight-bold">${{ formatCurrency(totalPayroll) }}</div>
               </div>
@@ -83,6 +83,7 @@
                   <div v-if="editingID === entry.user_shift_id">
                     <v-text-field
                       v-model.number="editForm.override_hours"
+                      class="payroll-inline-input"
                       type="number"
                       step="0.25"
                       min="0"
@@ -100,6 +101,7 @@
                   <div v-if="editingID === entry.user_shift_id">
                     <v-text-field
                       v-model.number="editForm.override_hourly_rate"
+                      class="payroll-inline-input"
                       type="number"
                       step="0.01"
                       min="0"
@@ -117,6 +119,7 @@
                   <div v-if="editingID === entry.user_shift_id">
                     <v-text-field
                       v-model="editForm.notes"
+                      class="payroll-inline-input payroll-inline-notes"
                       density="compact"
                       variant="outlined"
                       hide-details
@@ -181,6 +184,7 @@
 <script>
 import budgetServices from "../services/budgetServices.js";
 import departmentUsersServices from "../services/departmentUsersServices.js";
+import Utils from "../config/utils.js";
 
 export default {
   name: "Budget",
@@ -231,6 +235,14 @@ export default {
   },
 
   methods: {
+    getErrorMessage(error, fallback) {
+      return (
+        error?.response?.data?.message ||
+        error?.message ||
+        fallback
+      );
+    },
+
     showMessage(message, color = "success") {
       this.snackbar = { show: true, message, color };
     },
@@ -277,9 +289,15 @@ export default {
     },
 
     getCurrentUser() {
-      const raw = localStorage.getItem("user");
-      const stored = raw ? JSON.parse(raw) : null;
+      const stored = Utils.getStore("user");
       return stored?.user ?? stored ?? null;
+    },
+
+    normalizeLinks(response) {
+      if (Array.isArray(response)) return response;
+      if (Array.isArray(response?.departmentusers)) return response.departmentusers;
+      if (Array.isArray(response?.data)) return response.data;
+      return [];
     },
 
     async getManagerDepartmentID() {
@@ -288,13 +306,7 @@ export default {
       if (!managerID) return null;
 
       const linksRes = await departmentUsersServices.getByUser(managerID);
-      const links = Array.isArray(linksRes)
-        ? linksRes
-        : Array.isArray(linksRes?.departmentusers)
-          ? linksRes.departmentusers
-          : Array.isArray(linksRes?.data)
-            ? linksRes.data
-            : [];
+      const links = this.normalizeLinks(linksRes);
 
       const managerLink =
         links.find((l) => String(l.role || "").trim().toLowerCase() === "manager") || links[0];
@@ -313,8 +325,8 @@ export default {
 
         await this.loadPayroll();
       } catch (e) {
-        console.error(e);
-        this.showMessage("Failed to load payroll page.", "error");
+        console.error("Failed to bootstrap payroll page:", e?.response?.data || e);
+        this.showMessage(this.getErrorMessage(e, "Failed to load payroll page."), "error");
       }
     },
 
@@ -330,8 +342,8 @@ export default {
         this.totalHoursWorked = Number(payload.total_hours || 0);
         this.totalPayroll = Number(payload.total_payroll || 0);
       } catch (e) {
-        console.error(e);
-        this.showMessage("Failed to load weekly payroll.", "error");
+        console.error("Failed to load weekly payroll:", e?.response?.data || e);
+        this.showMessage(this.getErrorMessage(e, "Failed to load weekly payroll."), "error");
       }
     },
 
@@ -367,8 +379,8 @@ export default {
         await this.loadPayroll();
         this.showMessage("Weekly payroll override saved.");
       } catch (e) {
-        console.error(e);
-        this.showMessage(e?.response?.data?.message || "Failed to save override.", "error");
+        console.error("Failed to save payroll override:", e?.response?.data || e);
+        this.showMessage(this.getErrorMessage(e, "Failed to save override."), "error");
       }
     },
 
@@ -384,10 +396,47 @@ export default {
         await this.loadPayroll();
         this.showMessage("Override cleared.");
       } catch (e) {
-        console.error(e);
-        this.showMessage(e?.response?.data?.message || "Failed to clear override.", "error");
+        console.error("Failed to clear payroll override:", e?.response?.data || e);
+        this.showMessage(this.getErrorMessage(e, "Failed to clear override."), "error");
       }
     },
   },
 };
 </script>
+
+<style scoped>
+.payroll-inline-input {
+  min-width: 110px;
+}
+
+.payroll-inline-notes {
+  min-width: 180px;
+}
+
+.payroll-inline-input :deep(.v-field) {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.payroll-inline-input :deep(.v-field__input),
+.payroll-inline-input :deep(input),
+.payroll-inline-input :deep(textarea) {
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  opacity: 1 !important;
+}
+
+.payroll-inline-input :deep(input[type="number"]) {
+  text-align: right;
+}
+
+.payroll-summary-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+  justify-content: flex-end;
+}
+
+.payroll-summary-stat {
+  min-width: 150px;
+}
+</style>
