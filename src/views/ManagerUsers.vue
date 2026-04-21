@@ -1276,6 +1276,16 @@ export default {
         weekStart: this.toISODate(this.getStartOfWeek(new Date())),
       };
     },
+    formatClockDate(value) {
+      if (!value) return "-";
+      const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return date.toLocaleDateString(undefined, {
+        month: "numeric",
+        day: "numeric",
+        year: "numeric",
+      });
+    },
     formatClockDateTime(value) {
       if (!value) return "-";
       const date = new Date(value);
