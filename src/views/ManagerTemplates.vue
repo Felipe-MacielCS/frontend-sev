@@ -644,7 +644,6 @@ export default {
         const sourceShifts = await shiftServices.getAll({ scheduleID: template.ID });
         const templateShifts = Array.isArray(sourceShifts) ? sourceShifts : [];
 
-        const targetStart = new Date(`${this.templateApply.anchor_date}T00:00:00`);
         const shiftDates = templateShifts
           .map((shift) => new Date(`${shift.shift_date}T00:00:00`))
           .filter((date) => !Number.isNaN(date.getTime()));
@@ -655,8 +654,8 @@ export default {
           ? new Date(Math.max(...shiftDates.map((date) => date.getTime())))
           : new Date(`${template.end_date}T00:00:00`);
         const totalDays = Math.round((sourceEnd - sourceStart) / (1000 * 60 * 60 * 24));
+        const targetStart = new Date(sourceStart);
         const targetEnd = this.addDays(targetStart, totalDays);
-        const dayOffset = Math.round((targetStart - sourceStart) / (1000 * 60 * 60 * 24));
 
         const createdScheduleRes = await scheduleServices.create({
           name: null,
@@ -670,10 +669,8 @@ export default {
         if (!newScheduleID) throw new Error("Could not create schedule from template.");
 
         for (const shift of templateShifts) {
-          const original = new Date(`${shift.shift_date}T00:00:00`);
-          const shifted = this.addDays(original, dayOffset);
           const createdShiftResponse = await shiftServices.create({
-            shift_date: this.toISODate(shifted),
+            shift_date: shift.shift_date,
             start_time: this.toHHMM(shift.start_time),
             end_time: this.toHHMM(shift.end_time),
             workers_required: shift.workers_required || 1,
