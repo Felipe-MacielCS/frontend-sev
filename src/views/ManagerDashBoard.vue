@@ -1446,12 +1446,11 @@ export default {
         const sourceShifts = await shiftServices.getAll({ scheduleID: template.ID });
         const templateShifts = Array.isArray(sourceShifts) ? sourceShifts : [];
 
-        const targetStart = new Date(`${this.templateApply.anchor_date}T00:00:00`);
         const sourceStart = new Date(`${template.start_date}T00:00:00`);
         const sourceEnd = new Date(`${template.end_date}T00:00:00`);
         const totalDays = Math.round((sourceEnd - sourceStart) / (1000 * 60 * 60 * 24));
+        const targetStart = new Date(sourceStart);
         const targetEnd = this.addDays(targetStart, totalDays);
-        const dayOffset = Math.round((targetStart - sourceStart) / (1000 * 60 * 60 * 24));
 
         const createdScheduleRes = await scheduleServices.create({
           name: null,
@@ -1465,10 +1464,8 @@ export default {
         if (!newScheduleID) throw new Error("Could not create schedule from template.");
 
         for (const s of templateShifts) {
-          const original = new Date(`${s.shift_date}T00:00:00`);
-          const shifted = this.addDays(original, dayOffset);
           const createdShift = await shiftServices.create({
-            shift_date: this.toISODate(shifted),
+            shift_date: s.shift_date,
             start_time: this.toHHMM(s.start_time),
             end_time: this.toHHMM(s.end_time),
             workers_required: s.workers_required || 1,
