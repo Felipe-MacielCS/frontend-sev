@@ -1120,7 +1120,7 @@ export default {
         if (!templateID) throw new Error("Could not create template.");
 
         for (const shift of shiftsToCopy) {
-          await shiftServices.create({
+          const createdShiftRes = await shiftServices.create({
             shift_date: shift.shift_date,
             start_time: this.toHHMM(shift.start_time),
             end_time: this.toHHMM(shift.end_time),
@@ -1128,6 +1128,19 @@ export default {
             scheduleID: templateID,
             positionID: shift.positionID || null,
           });
+          const createdShift = createdShiftRes?.data || createdShiftRes;
+          const createdShiftID = createdShift?.ID ?? createdShift?.id ?? null;
+
+          if (!createdShiftID) continue;
+
+          const assignments = this.userShiftAssignmentsByShiftID[shift.ID] || [];
+          for (const assignment of assignments) {
+            await userShiftServices.create({
+              shiftID: createdShiftID,
+              userID: assignment.userID,
+              status: assignment.status || "assigned",
+            });
+          }
         }
 
         await this.loadSchedules();
@@ -1433,7 +1446,7 @@ export default {
         const sourceShifts = await shiftServices.getAll({ scheduleID: template.ID });
         const templateShifts = Array.isArray(sourceShifts) ? sourceShifts : [];
 
-        const targetStart = this.getStartOfWeek(new Date(`${this.templateApply.anchor_date}T00:00:00`));
+        const targetStart = new Date(`${this.templateApply.anchor_date}T00:00:00`);
         const sourceStart = new Date(`${template.start_date}T00:00:00`);
         const sourceEnd = new Date(`${template.end_date}T00:00:00`);
         const totalDays = Math.round((sourceEnd - sourceStart) / (1000 * 60 * 60 * 24));

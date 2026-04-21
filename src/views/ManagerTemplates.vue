@@ -641,7 +641,7 @@ export default {
         const sourceShifts = await shiftServices.getAll({ scheduleID: template.ID });
         const templateShifts = Array.isArray(sourceShifts) ? sourceShifts : [];
 
-        const targetStart = this.getStartOfWeek(new Date(`${this.templateApply.anchor_date}T00:00:00`));
+        const targetStart = new Date(`${this.templateApply.anchor_date}T00:00:00`);
         const shiftDates = templateShifts
           .map((shift) => new Date(`${shift.shift_date}T00:00:00`))
           .filter((date) => !Number.isNaN(date.getTime()));
