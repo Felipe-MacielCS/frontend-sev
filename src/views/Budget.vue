@@ -59,7 +59,6 @@
                 <th class="text-left">Employee</th>
                 <th class="text-left">Position</th>
                 <th class="text-left">Clocked Hours</th>
-                <th class="text-left">Hours Used</th>
                 <th class="text-left">Base Rate</th>
                 <th class="text-left">Rate Used</th>
                 <th class="text-left">Total</th>
@@ -69,7 +68,7 @@
             </thead>
             <tbody>
               <tr v-if="entries.length === 0">
-                <td colspan="9" class="text-medium-emphasis">
+                <td colspan="8" class="text-medium-emphasis">
                   No payroll entries found for this week.
                 </td>
               </tr>
@@ -78,23 +77,6 @@
                 <td>{{ entry.employee_name }}</td>
                 <td>{{ entry.position_name || "-" }}</td>
                 <td>{{ formatHours(entry.base_hours) }}</td>
-
-                <td>
-                  <div v-if="editingID === entry.user_shift_id">
-                    <v-text-field
-                      v-model.number="editForm.override_hours"
-                      class="payroll-inline-input"
-                      type="number"
-                      step="0.25"
-                      min="0"
-                      density="compact"
-                      variant="outlined"
-                      hide-details
-                    />
-                  </div>
-                  <div v-else>{{ formatHours(entry.effective_hours) }}</div>
-                </td>
-
                 <td>${{ formatCurrency(entry.base_rate) }}</td>
 
                 <td>
