@@ -59,9 +59,7 @@
                 <th class="text-left">Employee</th>
                 <th class="text-left">Position</th>
                 <th class="text-left">Clocked Hours</th>
-                <th class="text-left">Hours Used</th>
-                <th class="text-left">Base Rate</th>
-                <th class="text-left">Rate Used</th>
+                <th class="text-left">Rate</th>
                 <th class="text-left">Total</th>
                 <th class="text-left">Notes</th>
                 <th class="text-left">Actions</th>
@@ -69,7 +67,7 @@
             </thead>
             <tbody>
               <tr v-if="entries.length === 0">
-                <td colspan="9" class="text-medium-emphasis">
+                <td colspan="7" class="text-medium-emphasis">
                   No payroll entries found for this week.
                 </td>
               </tr>
@@ -77,8 +75,6 @@
               <tr v-for="entry in entries" :key="entry.user_shift_id">
                 <td>{{ entry.employee_name }}</td>
                 <td>{{ entry.position_name || "-" }}</td>
-                <td>{{ formatHours(entry.base_hours) }}</td>
-
                 <td>
                   <div v-if="editingID === entry.user_shift_id">
                     <v-text-field
@@ -93,8 +89,6 @@
                   </div>
                   <div v-else>{{ formatHours(entry.effective_hours) }}</div>
                 </td>
-
-                <td>${{ formatCurrency(entry.base_rate) }}</td>
 
                 <td>
                   <div v-if="editingID === entry.user_shift_id">
@@ -331,7 +325,10 @@ export default {
         this.totalPayroll = Number(payload.total_payroll || 0);
       } catch (e) {
         console.error(e);
-        this.showMessage("Failed to load weekly payroll.", "error");
+        this.showMessage(
+          e?.response?.data?.message || e?.message || "Failed to load weekly payroll.",
+          "error"
+        );
       }
     },
 
