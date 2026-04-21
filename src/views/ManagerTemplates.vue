@@ -409,7 +409,7 @@ export default {
     },
   },
   async mounted() {
-    this.templateApply.anchor_date = this.toISODate(new Date());
+    this.templateApply.anchor_date = this.selectedTemplate?.start_date || "";
     await this.bootstrap();
   },
   methods: {
@@ -543,6 +543,9 @@ export default {
     async onTemplateSelected() {
       const template = this.selectedTemplate;
       this.templateEditor.name = template?.name || "";
+      if (!this.templateApply.anchor_date && template?.start_date) {
+        this.templateApply.anchor_date = template.start_date;
+      }
       await this.loadShiftsForSelectedTemplate();
       if (template?.start_date) {
         this.$nextTick(() => this.$refs.templateCalendar?.goToDate?.(template.start_date));
@@ -629,7 +632,7 @@ export default {
     },
     openApplyTemplateDialog() {
       if (!this.selectedTemplate) return;
-      this.templateApply.anchor_date = this.toISODate(new Date());
+      this.templateApply.anchor_date = this.selectedTemplate?.start_date || "";
       this.applyTemplateDialog = true;
     },
     async createScheduleFromTemplate() {
