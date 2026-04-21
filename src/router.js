@@ -5,6 +5,7 @@ import Login from "./views/Login.vue";
 import WorkerDashboard from "./views/WorkerDashBoard.vue";
 import WorkerClockInOut from "./views/WorkerClockInOut.vue";
 import WorkerSettings from "./views/WorkerSettings.vue";
+import WorkerTaskList from "./views/WorkerTaskList.vue";
 
 import ManagerDashboard from "./views/ManagerDashBoard.vue";
 import ManagerSettings from "./views/ManagerSettings.vue";
@@ -125,6 +126,12 @@ const router = createRouter({
       path: "/worker/clock",
       name: "workerClockInOut",
       component: WorkerClockInOut,
+      meta: { role: "Worker" },
+    },
+    {
+      path: "/worker/shifts/:userShiftID/tasks",
+      name: "workerTaskList",
+      component: WorkerTaskList,
       meta: { role: "Worker" },
     },
     {
